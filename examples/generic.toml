@@ -1,0 +1,33 @@
+# Invoice Configuration Example
+format = "generic"
+
+[company]
+name = "Acme Corp"
+address = "123 Business Ave, Suite 100"
+city_state_zip = "New York, NY, 10001"
+country = "United States"
+
+[client]
+name = "Widget Industries LLC"
+address = "456 Commerce Street"
+city_state_zip = "Los Angeles, CA, 90001"
+country = "United States"
+tax_id = "12-3456789"
+
+[invoice]
+number = "INV-2025.001"
+date = "Mar 30 2025"
+due_date = "Apr 14 2025"
+currency = "USD"
+
+[[items]]
+description = "Software Development Services"
+rate = 5000.00
+
+[[items]]
+description = "Consulting & Advisory"
+rate = 1500.00
+
+[[items]]
+description = "Infrastructure Costs"
+rate = 250.00

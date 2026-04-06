@@ -1,0 +1,58 @@
+# AFIP Factura A Example (Argentina - Responsable Inscripto)
+format = "afip_a"
+
+[emisor]
+razon_social = "JOHN DOE"
+domicilio_comercial = "Not fake St. 123 - CABA"
+condicion_iva = "Responsable Monotributo"
+cuit = "11234567899"
+ingresos_brutos = "exento"
+inicio_actividades = "01/01/1930"
+
+[receptor]
+nombre = "JANE DOE"
+domicilio = "Totally not fake St. 123 - Capital Federal, Ciudad de Buenos Aires"
+cuit = "11234567899"
+condicion_iva = "IVA Responsable Inscripto"
+condicion_venta = "Otra"
+
+[comprobante]
+tipo = "C"
+codigo = "007"
+punto_de_venta = "00001"
+numero = "00000111"
+fecha_emision = "01/01/1930"
+periodo_desde = "01/01/1930"
+periodo_hasta = "01/01/1930"
+fecha_vencimiento = "01/01/1930"
+
+[[items]]
+codigo = "1"
+descripcion = "Servicios Profesionales"
+cantidad = 1.0
+unidad = "otras unidades"
+precio_unitario = 100.00
+bonificacion_porcentaje = 0.0
+subtotal = 100.00
+alicuota_iva = 1.21
+subtotal_con_iva = 121.00
+
+[[otros_tributos]]
+descripcion = "Per./Ret. de Impuesto a las Ganancias"
+importe = 0.0
+
+[[otros_tributos]]
+descripcion = "Per./Ret. de IVA"
+importe = 0.0
+
+[[otros_tributos]]
+descripcion = "Impuestos Internos"
+importe = 0.0
+
+[[otros_tributos]]
+descripcion = "Impuestos Municipales"
+importe = 0.0
+
+[cae]
+numero = "12345678901234"
+vencimiento = "01/01/1930"

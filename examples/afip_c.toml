@@ -1,0 +1,52 @@
+# AFIP Factura C Example (Argentina - Monotributo)
+format = "afip_c"
+
+[emisor]
+razon_social = "Juan Pérez"
+domicilio_comercial = "Av. Corrientes 1234 - CABA"
+condicion_iva = "Responsable Monotributo"
+cuit = "20123456789"
+ingresos_brutos = "12345"
+inicio_actividades = "01/01/2020"
+
+[receptor]
+# Optional fields - leave empty for "Consumidor Final"
+# nombre = "María García"
+# domicilio = "Calle Falsa 123"
+# documento = "DNI 12345678"
+condicion_iva = "Consumidor Final"
+condicion_venta = "Cuenta Corriente"
+
+[comprobante]
+tipo = "C"
+codigo = "011"
+punto_de_venta = "00001"
+numero = "00000001"
+fecha_emision = "01/02/2025"
+periodo_desde = "01/01/2025"
+periodo_hasta = "31/01/2025"
+fecha_vencimiento = "15/02/2025"
+
+[[items]]
+codigo = "1"
+descripcion = "Servicio de consultoría"
+cantidad = 1.0
+unidad = "unidades"
+precio_unitario = 50000.00
+bonificacion_porcentaje = 0.0
+bonificacion_importe = 0.0
+subtotal = 50000.00
+
+[[items]]
+codigo = "2"
+descripcion = "Desarrollo de software"
+cantidad = 10.0
+unidad = "horas"
+precio_unitario = 5000.00
+bonificacion_porcentaje = 0.0
+bonificacion_importe = 0.0
+subtotal = 50000.00
+
+[cae]
+numero = "12345678901234"
+vencimiento = "11/02/2025"
