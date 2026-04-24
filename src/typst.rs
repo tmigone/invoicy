@@ -41,6 +41,9 @@ mod tests {
 
     #[test]
     fn option_string_some_with_quotes() {
-        assert_eq!(option_string(&Some(r#"say "hi""#.into())), r#""say \"hi\"""#);
+        assert_eq!(
+            option_string(&Some(r#"say "hi""#.into())),
+            r#""say \"hi\"""#
+        );
     }
 }

@@ -1,4 +1,4 @@
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde_json::Value;
 
 struct FieldInfo {
@@ -7,12 +7,7 @@ struct FieldInfo {
     optional: bool,
 }
 
-fn extract_fields(
-    schema: &Value,
-    definitions: &Value,
-    prefix: &str,
-    fields: &mut Vec<FieldInfo>,
-) {
+fn extract_fields(schema: &Value, definitions: &Value, prefix: &str, fields: &mut Vec<FieldInfo>) {
     let Some(obj) = schema.as_object() else {
         return;
     };
@@ -231,7 +226,10 @@ fn normalize_type(typ: &str) -> String {
 pub fn print_schema<T: JsonSchema>(format_name: &str) {
     let root_schema = schema_for!(T);
     let json = serde_json::to_value(&root_schema).expect("Failed to serialize schema");
-    let definitions = json.get("$defs").cloned().unwrap_or(Value::Object(Default::default()));
+    let definitions = json
+        .get("$defs")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
 
     let mut fields = Vec::new();
     extract_fields(&json, &definitions, "", &mut fields);
