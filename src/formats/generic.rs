@@ -108,3 +108,98 @@ impl GenericInvoice {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_invoice() -> GenericInvoice {
+        GenericInvoice {
+            company: Company {
+                name: "Acme Corp".into(),
+                address: "123 Main St".into(),
+                address2: "Suite 100".into(),
+                city_state_zip: "New York, NY 10001".into(),
+                country: "USA".into(),
+            },
+            client: Client {
+                name: "Client Inc".into(),
+                address: "456 Oak Ave".into(),
+                address2: "".into(),
+                city_state_zip: "Los Angeles, CA 90001".into(),
+                country: "USA".into(),
+                tax_id: Some("12-3456789".into()),
+            },
+            invoice: InvoiceMeta {
+                number: "INV-001".into(),
+                date: "2025-01-01".into(),
+                due_date: "2025-01-15".into(),
+                currency: "USD".into(),
+            },
+            items: vec![
+                LineItem {
+                    description: "Consulting".into(),
+                    rate: 1000.0,
+                },
+                LineItem {
+                    description: "Development".into(),
+                    rate: 2000.0,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn total_sums_items() {
+        let invoice = sample_invoice();
+        assert_eq!(invoice.total(), 3000.0);
+    }
+
+    #[test]
+    fn to_typst_dict_contains_company() {
+        let invoice = sample_invoice();
+        let output = invoice.to_typst_dict();
+        assert!(output.contains(r#"name: "Acme Corp""#));
+        assert!(output.contains(r#"address: "123 Main St""#));
+    }
+
+    #[test]
+    fn to_typst_dict_contains_client() {
+        let invoice = sample_invoice();
+        let output = invoice.to_typst_dict();
+        assert!(output.contains(r#"name: "Client Inc""#));
+        assert!(output.contains(r#"tax_id: "12-3456789""#));
+    }
+
+    #[test]
+    fn to_typst_dict_contains_items() {
+        let invoice = sample_invoice();
+        let output = invoice.to_typst_dict();
+        assert!(output.contains(r#"description: "Consulting""#));
+        assert!(output.contains("rate: 1000"));
+        assert!(output.contains(r#"description: "Development""#));
+    }
+
+    #[test]
+    fn to_typst_dict_contains_total() {
+        let invoice = sample_invoice();
+        let output = invoice.to_typst_dict();
+        assert!(output.contains("total: 3000"));
+    }
+
+    #[test]
+    fn to_typst_dict_none_tax_id() {
+        let mut invoice = sample_invoice();
+        invoice.client.tax_id = None;
+        let output = invoice.to_typst_dict();
+        assert!(output.contains("tax_id: none"));
+    }
+
+    #[test]
+    fn to_typst_dict_escapes_quotes() {
+        let mut invoice = sample_invoice();
+        invoice.company.name = r#"Acme "Best" Corp"#.into();
+        let output = invoice.to_typst_dict();
+        assert!(output.contains(r#"name: "Acme \"Best\" Corp""#));
+    }
+}

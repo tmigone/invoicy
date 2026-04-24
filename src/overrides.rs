@@ -144,3 +144,190 @@ fn parse_array_access(s: &str) -> Option<(&str, &str)> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==========================================================================
+    // parse_value_auto tests
+    // ==========================================================================
+
+    #[test]
+    fn parse_value_auto_boolean() {
+        assert_eq!(parse_value_auto("true"), Value::Boolean(true));
+        assert_eq!(parse_value_auto("false"), Value::Boolean(false));
+    }
+
+    #[test]
+    fn parse_value_auto_integer() {
+        assert_eq!(parse_value_auto("42"), Value::Integer(42));
+        assert_eq!(parse_value_auto("-10"), Value::Integer(-10));
+        assert_eq!(parse_value_auto("0"), Value::Integer(0));
+    }
+
+    #[test]
+    fn parse_value_auto_float() {
+        assert_eq!(parse_value_auto("3.14"), Value::Float(3.14));
+        assert_eq!(parse_value_auto("-2.5"), Value::Float(-2.5));
+    }
+
+    #[test]
+    fn parse_value_auto_string() {
+        assert_eq!(parse_value_auto("hello"), Value::String("hello".into()));
+        assert_eq!(parse_value_auto(""), Value::String("".into()));
+    }
+
+    #[test]
+    fn parse_value_auto_leading_zeros_stay_string() {
+        assert_eq!(parse_value_auto("00123"), Value::String("00123".into()));
+        assert_eq!(parse_value_auto("007"), Value::String("007".into()));
+    }
+
+    // ==========================================================================
+    // parse_array_access tests
+    // ==========================================================================
+
+    #[test]
+    fn parse_array_access_valid() {
+        assert_eq!(parse_array_access("items[0]"), Some(("items", "0")));
+        assert_eq!(parse_array_access("arr[123]"), Some(("arr", "123")));
+    }
+
+    #[test]
+    fn parse_array_access_invalid() {
+        assert_eq!(parse_array_access("items"), None);
+        assert_eq!(parse_array_access("items[]"), None);
+        assert_eq!(parse_array_access("items["), None);
+    }
+
+    // ==========================================================================
+    // apply tests (integration)
+    // ==========================================================================
+
+    fn sample_config() -> Value {
+        toml::from_str(
+            r#"
+            name = "test"
+            count = 42
+            price = 9.99
+            enabled = true
+
+            [nested]
+            value = "inner"
+
+            [[items]]
+            desc = "first"
+            qty = 1
+
+            [[items]]
+            desc = "second"
+            qty = 2
+            "#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn apply_simple_string() {
+        let mut config = sample_config();
+        apply(&mut config, "name=updated").unwrap();
+        assert_eq!(config.get("name").unwrap().as_str().unwrap(), "updated");
+    }
+
+    #[test]
+    fn apply_string_field_with_number_value() {
+        let mut config = sample_config();
+        // name is a string field, so 123 should stay as string
+        apply(&mut config, "name=123").unwrap();
+        assert_eq!(config.get("name").unwrap().as_str().unwrap(), "123");
+    }
+
+    #[test]
+    fn apply_integer_field() {
+        let mut config = sample_config();
+        apply(&mut config, "count=100").unwrap();
+        assert_eq!(config.get("count").unwrap().as_integer().unwrap(), 100);
+    }
+
+    #[test]
+    fn apply_float_field() {
+        let mut config = sample_config();
+        apply(&mut config, "price=19.99").unwrap();
+        assert_eq!(config.get("price").unwrap().as_float().unwrap(), 19.99);
+    }
+
+    #[test]
+    fn apply_boolean_field() {
+        let mut config = sample_config();
+        apply(&mut config, "enabled=false").unwrap();
+        assert_eq!(config.get("enabled").unwrap().as_bool().unwrap(), false);
+    }
+
+    #[test]
+    fn apply_nested_value() {
+        let mut config = sample_config();
+        apply(&mut config, "nested.value=changed").unwrap();
+        assert_eq!(
+            config
+                .get("nested")
+                .unwrap()
+                .get("value")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "changed"
+        );
+    }
+
+    #[test]
+    fn apply_array_element() {
+        let mut config = sample_config();
+        apply(&mut config, "items[0].desc=modified").unwrap();
+        assert_eq!(
+            config
+                .get("items")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .get("desc")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "modified"
+        );
+    }
+
+    #[test]
+    fn apply_array_element_integer() {
+        let mut config = sample_config();
+        apply(&mut config, "items[1].qty=99").unwrap();
+        assert_eq!(
+            config
+                .get("items")
+                .unwrap()
+                .as_array()
+                .unwrap()[1]
+                .get("qty")
+                .unwrap()
+                .as_integer()
+                .unwrap(),
+            99
+        );
+    }
+
+    #[test]
+    fn apply_invalid_format() {
+        let mut config = sample_config();
+        let result = apply(&mut config, "invalid");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid override format"));
+    }
+
+    #[test]
+    fn apply_missing_key() {
+        let mut config = sample_config();
+        let result = apply(&mut config, "nonexistent.field=value");
+        assert!(result.is_err());
+    }
+}

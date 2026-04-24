@@ -60,3 +60,107 @@ pub fn typst_option(opt: &Option<String>) -> String {
         .map(|s| format!("\"{}\"", escape_typst_string(s)))
         .unwrap_or_else(|| "none".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_typst_string_plain() {
+        assert_eq!(escape_typst_string("hello"), "hello");
+    }
+
+    #[test]
+    fn escape_typst_string_quotes() {
+        assert_eq!(escape_typst_string(r#"say "hi""#), r#"say \"hi\""#);
+    }
+
+    #[test]
+    fn escape_typst_string_backslash() {
+        assert_eq!(escape_typst_string(r"path\to\file"), r"path\\to\\file");
+    }
+
+    #[test]
+    fn typst_option_none() {
+        assert_eq!(typst_option(&None), "none");
+    }
+
+    #[test]
+    fn typst_option_some() {
+        assert_eq!(typst_option(&Some("value".into())), r#""value""#);
+    }
+
+    #[test]
+    fn typst_option_some_with_quotes() {
+        assert_eq!(typst_option(&Some(r#"say "hi""#.into())), r#""say \"hi\"""#);
+    }
+
+    #[test]
+    fn invoice_config_parses_generic() {
+        let toml = r#"
+            format = "generic"
+            [company]
+            name = "Test"
+            address = "123 St"
+            address2 = ""
+            city_state_zip = "City, ST 12345"
+            country = "USA"
+            [client]
+            name = "Client"
+            address = "456 Ave"
+            address2 = ""
+            city_state_zip = "Town, ST 67890"
+            country = "USA"
+            [invoice]
+            number = "INV-001"
+            date = "2025-01-01"
+            due_date = "2025-01-15"
+            currency = "USD"
+            [[items]]
+            description = "Service"
+            rate = 100.0
+        "#;
+        let config: InvoiceConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(config, InvoiceConfig::Generic(_)));
+        assert_eq!(config.invoice_number(), "INV-001");
+    }
+
+    #[test]
+    fn invoice_config_parses_afip_c() {
+        let toml = r#"
+            format = "afip_c"
+            [emisor]
+            razon_social = "Test"
+            domicilio_comercial = "Address"
+            condicion_iva = "Monotributo"
+            cuit = "20123456789"
+            ingresos_brutos = "12345"
+            inicio_actividades = "01/01/2020"
+            [receptor]
+            condicion_iva = "Consumidor Final"
+            condicion_venta = "Contado"
+            [comprobante]
+            tipo = "C"
+            codigo = "011"
+            punto_de_venta = "00001"
+            numero = "00000001"
+            fecha_emision = "01/01/2025"
+            fecha_vencimiento = "15/01/2025"
+            [[items]]
+            codigo = "1"
+            descripcion = "Service"
+            cantidad = 1.0
+            unidad = "u"
+            precio_unitario = 100.0
+            bonificacion_porcentaje = 0.0
+            bonificacion_importe = 0.0
+            subtotal = 100.0
+            [cae]
+            numero = "12345678901234"
+            vencimiento = "25/01/2025"
+        "#;
+        let config: InvoiceConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(config, InvoiceConfig::AfipC(_)));
+        assert_eq!(config.invoice_number(), "00001-00000001");
+    }
+}
