@@ -1,8 +1,9 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 
-use super::{escape_typst_string, typst_option};
+use crate::typst::{escape_string, option_string};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct GenericInvoice {
     pub company: Company,
     pub client: Client,
@@ -10,7 +11,7 @@ pub struct GenericInvoice {
     pub items: Vec<LineItem>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Company {
     pub name: String,
     pub address: String,
@@ -19,7 +20,7 @@ pub struct Company {
     pub country: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Client {
     pub name: String,
     pub address: String,
@@ -29,7 +30,7 @@ pub struct Client {
     pub tax_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct InvoiceMeta {
     pub number: String,
     pub date: String,
@@ -37,7 +38,7 @@ pub struct InvoiceMeta {
     pub currency: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LineItem {
     pub description: String,
     pub rate: f64,
@@ -55,7 +56,7 @@ impl GenericInvoice {
             .map(|item| {
                 format!(
                     "(description: \"{}\", rate: {})",
-                    escape_typst_string(&item.description),
+                    escape_string(&item.description),
                     item.rate
                 )
             })
@@ -88,21 +89,21 @@ impl GenericInvoice {
   total: {},
 )
 "#,
-            escape_typst_string(&self.company.name),
-            escape_typst_string(&self.company.address),
-            escape_typst_string(&self.company.address2),
-            escape_typst_string(&self.company.city_state_zip),
-            escape_typst_string(&self.company.country),
-            escape_typst_string(&self.client.name),
-            escape_typst_string(&self.client.address),
-            escape_typst_string(&self.client.address2),
-            escape_typst_string(&self.client.city_state_zip),
-            escape_typst_string(&self.client.country),
-            typst_option(&self.client.tax_id),
-            escape_typst_string(&self.invoice.number),
-            escape_typst_string(&self.invoice.date),
-            escape_typst_string(&self.invoice.due_date),
-            escape_typst_string(&self.invoice.currency),
+            escape_string(&self.company.name),
+            escape_string(&self.company.address),
+            escape_string(&self.company.address2),
+            escape_string(&self.company.city_state_zip),
+            escape_string(&self.company.country),
+            escape_string(&self.client.name),
+            escape_string(&self.client.address),
+            escape_string(&self.client.address2),
+            escape_string(&self.client.city_state_zip),
+            escape_string(&self.client.country),
+            option_string(&self.client.tax_id),
+            escape_string(&self.invoice.number),
+            escape_string(&self.invoice.date),
+            escape_string(&self.invoice.due_date),
+            escape_string(&self.invoice.currency),
             items_str.join(", "),
             self.total(),
         )

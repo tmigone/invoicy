@@ -18,3 +18,5 @@ chrono = "0.4"
 
 # Utils
 dirs = "6"
+schemars = "1.2.1"
+serde_json = "1.0.149"

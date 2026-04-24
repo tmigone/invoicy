@@ -51,49 +51,9 @@ impl InvoiceConfig {
     }
 }
 
-pub fn escape_typst_string(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-pub fn typst_option(opt: &Option<String>) -> String {
-    opt.as_ref()
-        .map(|s| format!("\"{}\"", escape_typst_string(s)))
-        .unwrap_or_else(|| "none".to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn escape_typst_string_plain() {
-        assert_eq!(escape_typst_string("hello"), "hello");
-    }
-
-    #[test]
-    fn escape_typst_string_quotes() {
-        assert_eq!(escape_typst_string(r#"say "hi""#), r#"say \"hi\""#);
-    }
-
-    #[test]
-    fn escape_typst_string_backslash() {
-        assert_eq!(escape_typst_string(r"path\to\file"), r"path\\to\\file");
-    }
-
-    #[test]
-    fn typst_option_none() {
-        assert_eq!(typst_option(&None), "none");
-    }
-
-    #[test]
-    fn typst_option_some() {
-        assert_eq!(typst_option(&Some("value".into())), r#""value""#);
-    }
-
-    #[test]
-    fn typst_option_some_with_quotes() {
-        assert_eq!(typst_option(&Some(r#"say "hi""#.into())), r#""say \"hi\"""#);
-    }
 
     #[test]
     fn invoice_config_parses_generic() {
