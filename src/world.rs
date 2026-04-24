@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::{LazyLock, OnceLock};
 
 use chrono::Datelike;
@@ -11,16 +10,18 @@ use typst::{Library, World};
 
 static LIBRARY: LazyLock<LazyHash<Library>> = LazyLock::new(|| LazyHash::new(Library::default()));
 
+// Embedded assets
+static ARCA_JPEG: &[u8] = include_bytes!("../assets/arca.jpeg");
+
 pub struct InvoiceWorld {
     source: Source,
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     now: OnceLock<Option<Datetime>>,
-    root: PathBuf,
 }
 
 impl InvoiceWorld {
-    pub fn new(source_text: &str, root: PathBuf) -> Self {
+    pub fn new(source_text: &str) -> Self {
         let source = Source::new(
             FileId::new(None, VirtualPath::new("main.typ")),
             source_text.to_string(),
@@ -33,7 +34,6 @@ impl InvoiceWorld {
             book: LazyHash::new(book),
             fonts,
             now: OnceLock::new(),
-            root,
         }
     }
 }
@@ -61,14 +61,13 @@ impl World for InvoiceWorld {
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
         let path = id.vpath().as_rootless_path();
-        let full_path = self.root.join(path);
+        let filename = path.to_string_lossy();
 
-        std::fs::read(&full_path)
-            .map(Bytes::new)
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => FileError::NotFound(full_path),
-                _ => FileError::Other(Some(e.to_string().into())),
-            })
+        // Check embedded assets
+        match filename.as_ref() {
+            "arca.jpeg" => Ok(Bytes::new(ARCA_JPEG.to_vec())),
+            _ => Err(FileError::NotFound(path.into())),
+        }
     }
 
     fn font(&self, index: usize) -> Option<Font> {
@@ -91,7 +90,6 @@ fn load_fonts() -> (FontBook, Vec<Font>) {
     let mut book = FontBook::new();
     let mut fonts = Vec::new();
 
-    // Search common system font directories
     let font_dirs = get_system_font_dirs();
 
     for dir in font_dirs {
@@ -157,8 +155,8 @@ fn is_font_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-pub fn compile_to_pdf(source: &str, assets_root: PathBuf) -> Result<Vec<u8>, String> {
-    let world = InvoiceWorld::new(source, assets_root);
+pub fn compile_to_pdf(source: &str) -> Result<Vec<u8>, String> {
+    let world = InvoiceWorld::new(source);
 
     let result = typst::compile(&world);
 

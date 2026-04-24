@@ -60,8 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from(format!("invoice-{}.pdf", config.invoice_number())));
     let output_path = unique_path(base_path);
 
-    // Compile to PDF (assets loaded from ./assets relative to cwd)
-    let pdf_bytes = world::compile_to_pdf(&full_source, PathBuf::from("assets"))?;
+    // Compile to PDF
+    let pdf_bytes = world::compile_to_pdf(&full_source)?;
 
     // Write output
     std::fs::write(&output_path, pdf_bytes)?;
