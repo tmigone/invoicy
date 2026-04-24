@@ -96,13 +96,13 @@ fn load_fonts() -> (FontBook, Vec<Font>) {
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if is_font_file(&path) {
-                    if let Ok(data) = std::fs::read(&path) {
-                        let bytes = Bytes::new(data);
-                        for font in Font::iter(bytes) {
-                            book.push(font.info().clone());
-                            fonts.push(font);
-                        }
+                if is_font_file(&path)
+                    && let Ok(data) = std::fs::read(&path)
+                {
+                    let bytes = Bytes::new(data);
+                    for font in Font::iter(bytes) {
+                        book.push(font.info().clone());
+                        fonts.push(font);
                     }
                 }
             }

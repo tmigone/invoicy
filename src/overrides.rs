@@ -28,13 +28,12 @@ fn get_value_type(config: &Value, key: &str) -> ValueType {
 
     for part in &parts {
         if let Some((name, idx_str)) = parse_array_access(part) {
-            if let Some(arr) = current.get(name).and_then(|v| v.as_array()) {
-                if let Ok(idx) = idx_str.parse::<usize>() {
-                    if let Some(elem) = arr.get(idx) {
-                        current = elem;
-                        continue;
-                    }
-                }
+            if let Some(arr) = current.get(name).and_then(|v| v.as_array())
+                && let Ok(idx) = idx_str.parse::<usize>()
+                && let Some(elem) = arr.get(idx)
+            {
+                current = elem;
+                continue;
             }
             return ValueType::Unknown;
         } else if let Some(next) = current.get(*part) {
