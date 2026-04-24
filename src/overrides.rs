@@ -1,9 +1,12 @@
 use toml::Value;
 
 pub fn apply(config: &mut Value, override_str: &str) -> Result<(), String> {
-    let (key, value) = override_str
-        .split_once('=')
-        .ok_or_else(|| format!("Invalid override format: '{}'. Expected KEY=VALUE", override_str))?;
+    let (key, value) = override_str.split_once('=').ok_or_else(|| {
+        format!(
+            "Invalid override format: '{}'. Expected KEY=VALUE",
+            override_str
+        )
+    })?;
 
     let existing_type = get_value_type(config, key);
     let parsed_value = parse_value_with_hint(value, existing_type);
@@ -285,11 +288,7 @@ mod tests {
         let mut config = sample_config();
         apply(&mut config, "items[0].desc=modified").unwrap();
         assert_eq!(
-            config
-                .get("items")
-                .unwrap()
-                .as_array()
-                .unwrap()[0]
+            config.get("items").unwrap().as_array().unwrap()[0]
                 .get("desc")
                 .unwrap()
                 .as_str()
@@ -303,11 +302,7 @@ mod tests {
         let mut config = sample_config();
         apply(&mut config, "items[1].qty=99").unwrap();
         assert_eq!(
-            config
-                .get("items")
-                .unwrap()
-                .as_array()
-                .unwrap()[1]
+            config.get("items").unwrap().as_array().unwrap()[1]
                 .get("qty")
                 .unwrap()
                 .as_integer()

@@ -75,7 +75,10 @@ fn unique_path(path: PathBuf) -> PathBuf {
         return path;
     }
 
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("invoice");
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("invoice");
     let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("pdf");
     let parent = path.parent().unwrap_or(std::path::Path::new("."));
 
