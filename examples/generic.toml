@@ -4,12 +4,14 @@ format = "generic"
 [company]
 name = "Acme Corp"
 address = "123 Business Ave, Suite 100"
+address2 = "Suite 5C" 
 city_state_zip = "New York, NY, 10001"
 country = "United States"
 
 [client]
 name = "Widget Industries LLC"
 address = "456 Commerce Street"
+address2 = ""
 city_state_zip = "Los Angeles, CA, 90001"
 country = "United States"
 tax_id = "12-3456789"

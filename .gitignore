@@ -1,5 +1,6 @@
+.DS_Store
 /target
 *.pdf
 
 # Real data (not examples)
-examples/real.toml
+examples/real*.toml
