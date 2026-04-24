@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use toml::Value;
 
 mod formats;
+mod overrides;
 mod world;
 
 use formats::InvoiceConfig;
@@ -22,14 +24,26 @@ struct Args {
     /// Output PDF path (defaults to invoice-{number}.pdf)
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Override config values (e.g., --set comprobante.numero=00000153)
+    #[arg(short = 's', long = "set", value_name = "KEY=VALUE")]
+    overrides: Vec<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    // Read and parse config
+    // Read and parse config as TOML Value first
     let config_content = std::fs::read_to_string(&args.config)?;
-    let config: InvoiceConfig = toml::from_str(&config_content)?;
+    let mut config_value: Value = toml::from_str(&config_content)?;
+
+    // Apply overrides
+    for override_str in &args.overrides {
+        overrides::apply(&mut config_value, override_str)?;
+    }
+
+    // Deserialize to InvoiceConfig
+    let config: InvoiceConfig = config_value.try_into()?;
 
     // Get template (from file or built-in)
     let template_content = match &args.template {
