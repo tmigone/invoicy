@@ -1,8 +1,9 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 
-use super::{escape_typst_string, typst_option};
+use crate::typst::{escape_string, option_string};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct AfipCInvoice {
     pub emisor: Emisor,
     pub receptor: Receptor,
@@ -11,7 +12,7 @@ pub struct AfipCInvoice {
     pub cae: Cae,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Emisor {
     pub razon_social: String,
     pub domicilio_comercial: String,
@@ -21,7 +22,7 @@ pub struct Emisor {
     pub inicio_actividades: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Receptor {
     pub nombre: Option<String>,
     pub domicilio: Option<String>,
@@ -30,7 +31,7 @@ pub struct Receptor {
     pub documento: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Comprobante {
     pub tipo: String,
     pub codigo: String,
@@ -42,7 +43,7 @@ pub struct Comprobante {
     pub fecha_vencimiento: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LineItem {
     pub codigo: String,
     pub descripcion: String,
@@ -54,7 +55,7 @@ pub struct LineItem {
     pub subtotal: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Cae {
     pub numero: String,
     pub vencimiento: String,
@@ -80,10 +81,10 @@ impl AfipCInvoice {
             .map(|item| {
                 format!(
                     r#"(codigo: "{}", descripcion: "{}", cantidad: {}, unidad: "{}", precio_unitario: {}, bonif_pct: {}, bonif_imp: {}, subtotal: {})"#,
-                    escape_typst_string(&item.codigo),
-                    escape_typst_string(&item.descripcion),
+                    escape_string(&item.codigo),
+                    escape_string(&item.descripcion),
                     item.cantidad,
-                    escape_typst_string(&item.unidad),
+                    escape_string(&item.unidad),
                     item.precio_unitario,
                     item.bonificacion_porcentaje,
                     item.bonificacion_importe,
@@ -129,28 +130,28 @@ impl AfipCInvoice {
   total: {},
 )
 "#,
-            escape_typst_string(&self.emisor.razon_social),
-            escape_typst_string(&self.emisor.domicilio_comercial),
-            escape_typst_string(&self.emisor.condicion_iva),
-            escape_typst_string(&self.emisor.cuit),
-            escape_typst_string(&self.emisor.ingresos_brutos),
-            escape_typst_string(&self.emisor.inicio_actividades),
-            typst_option(&self.receptor.nombre),
-            typst_option(&self.receptor.domicilio),
-            escape_typst_string(&self.receptor.condicion_iva),
-            escape_typst_string(&self.receptor.condicion_venta),
-            typst_option(&self.receptor.documento),
-            escape_typst_string(&self.comprobante.tipo),
-            escape_typst_string(&self.comprobante.codigo),
-            escape_typst_string(&self.comprobante.punto_de_venta),
-            escape_typst_string(&self.comprobante.numero),
-            escape_typst_string(&self.comprobante.fecha_emision),
-            typst_option(&self.comprobante.periodo_desde),
-            typst_option(&self.comprobante.periodo_hasta),
-            escape_typst_string(&self.comprobante.fecha_vencimiento),
+            escape_string(&self.emisor.razon_social),
+            escape_string(&self.emisor.domicilio_comercial),
+            escape_string(&self.emisor.condicion_iva),
+            escape_string(&self.emisor.cuit),
+            escape_string(&self.emisor.ingresos_brutos),
+            escape_string(&self.emisor.inicio_actividades),
+            option_string(&self.receptor.nombre),
+            option_string(&self.receptor.domicilio),
+            escape_string(&self.receptor.condicion_iva),
+            escape_string(&self.receptor.condicion_venta),
+            option_string(&self.receptor.documento),
+            escape_string(&self.comprobante.tipo),
+            escape_string(&self.comprobante.codigo),
+            escape_string(&self.comprobante.punto_de_venta),
+            escape_string(&self.comprobante.numero),
+            escape_string(&self.comprobante.fecha_emision),
+            option_string(&self.comprobante.periodo_desde),
+            option_string(&self.comprobante.periodo_hasta),
+            escape_string(&self.comprobante.fecha_vencimiento),
             items_str.join(", "),
-            escape_typst_string(&self.cae.numero),
-            escape_typst_string(&self.cae.vencimiento),
+            escape_string(&self.cae.numero),
+            escape_string(&self.cae.vencimiento),
             self.subtotal(),
             self.otros_tributos(),
             self.total(),

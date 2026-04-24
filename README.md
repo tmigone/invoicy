@@ -4,34 +4,52 @@ A CLI tool for generating PDF invoices from TOML configuration files using Typst
 
 ## Features
 
-- Generate professional PDF invoices from simple TOML configs
+- Generate PDF invoices from simple TOML configs
 - Multiple invoice formats:
   - `generic` - Simple international invoice
   - `afip_c` - Argentina AFIP Factura C (Monotributo)
   - `afip_a` - Argentina AFIP Factura A (Responsable Inscripto)
+- Override config values via CLI (`--set key=value`)
 - Customizable templates via Typst
-- System font support
+- Single self-contained binary
 
 ## Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tmigone/invoicy/main/install.sh | sh
+```
+
+Or download binaries directly from [GitHub Releases](https://github.com/tmigone/invoicy/releases).
+
+### Build from source
 
 ```bash
 cargo build --release
 ```
 
-The binary will be at `target/release/invoicy`.
-
 ## Usage
 
 ```bash
 # Generate invoice using built-in template
-invoicy -c examples/afip_c.toml
+invoicy generate -c invoice.toml
 
 # Generate with custom output path
-invoicy -c examples/afip_c.toml -o my-invoice.pdf
+invoicy generate -c invoice.toml -o my-invoice.pdf
 
 # Use a custom template
-invoicy -c examples/generic.toml -t my-template.typ
+invoicy generate -c invoice.toml -t my-template.typ
+
+# Override config values (useful for automation)
+invoicy generate -c base.toml --set comprobante.numero=00000153
+
+# List available formats
+invoicy schema list
+
+# Show schema for a format (useful for discovering --set keys)
+invoicy schema generic
+invoicy schema afip_c
 ```
+
 
 ## Configuration
 
@@ -45,12 +63,14 @@ format = "generic"
 [company]
 name = "Acme Corp"
 address = "123 Business Ave"
+address2 = ""
 city_state_zip = "New York, NY, 10001"
 country = "United States"
 
 [client]
 name = "Client Inc"
 address = "456 Commerce St"
+address2 = ""
 city_state_zip = "Los Angeles, CA, 90001"
 country = "United States"
 tax_id = "12-3456789"
@@ -110,11 +130,3 @@ subtotal = 50000.00
 numero = "12345678901234"
 vencimiento = "11/02/2025"
 ```
-
-## Assets
-
-Place images and other assets in the `assets/` directory. Templates can reference them by filename (e.g., `#image("arca.jpeg")`).
-
-## License
-
-MIT

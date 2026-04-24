@@ -1,8 +1,9 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 
-use super::{escape_typst_string, typst_option};
+use crate::typst::{escape_string, option_string};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct AfipAInvoice {
     pub emisor: Emisor,
     pub receptor: Receptor,
@@ -12,7 +13,7 @@ pub struct AfipAInvoice {
     pub cae: Cae,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Emisor {
     pub razon_social: String,
     pub domicilio_comercial: String,
@@ -22,7 +23,7 @@ pub struct Emisor {
     pub inicio_actividades: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Receptor {
     pub nombre: Option<String>,
     pub domicilio: Option<String>,
@@ -31,7 +32,7 @@ pub struct Receptor {
     pub cuit: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Comprobante {
     pub tipo: String,
     pub codigo: String,
@@ -43,7 +44,7 @@ pub struct Comprobante {
     pub fecha_vencimiento: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LineItem {
     pub codigo: String,
     pub descripcion: String,
@@ -56,7 +57,7 @@ pub struct LineItem {
     pub subtotal_con_iva: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Tributo {
     pub descripcion: String,
     pub detalle: Option<String>,
@@ -64,7 +65,7 @@ pub struct Tributo {
     pub importe: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Cae {
     pub numero: String,
     pub vencimiento: String,
@@ -104,10 +105,10 @@ impl AfipAInvoice {
             .map(|item| {
                 format!(
                     r#"(codigo: "{}", descripcion: "{}", cantidad: {}, unidad: "{}", precio_unitario: {}, bonif_pct: {}, subtotal: {}, alicuota_iva: {}, subtotal_con_iva: {})"#,
-                    escape_typst_string(&item.codigo),
-                    escape_typst_string(&item.descripcion),
+                    escape_string(&item.codigo),
+                    escape_string(&item.descripcion),
                     item.cantidad,
-                    escape_typst_string(&item.unidad),
+                    escape_string(&item.unidad),
                     item.precio_unitario,
                     item.bonificacion_porcentaje,
                     item.subtotal,
@@ -126,8 +127,8 @@ impl AfipAInvoice {
                     .map(|t| {
                         format!(
                             r#"(descripcion: "{}", detalle: {}, alicuota: {}, importe: {})"#,
-                            escape_typst_string(&t.descripcion),
-                            typst_option(&t.detalle),
+                            escape_string(&t.descripcion),
+                            option_string(&t.detalle),
                             t.alicuota
                                 .map(|a| a.to_string())
                                 .unwrap_or_else(|| "none".to_string()),
@@ -184,29 +185,29 @@ impl AfipAInvoice {
   ),
 )
 "#,
-            escape_typst_string(&self.emisor.razon_social),
-            escape_typst_string(&self.emisor.domicilio_comercial),
-            escape_typst_string(&self.emisor.condicion_iva),
-            escape_typst_string(&self.emisor.cuit),
-            escape_typst_string(&self.emisor.ingresos_brutos),
-            escape_typst_string(&self.emisor.inicio_actividades),
-            typst_option(&self.receptor.nombre),
-            typst_option(&self.receptor.domicilio),
-            escape_typst_string(&self.receptor.condicion_iva),
-            escape_typst_string(&self.receptor.condicion_venta),
-            typst_option(&self.receptor.cuit),
-            escape_typst_string(&self.comprobante.tipo),
-            escape_typst_string(&self.comprobante.codigo),
-            escape_typst_string(&self.comprobante.punto_de_venta),
-            escape_typst_string(&self.comprobante.numero),
-            escape_typst_string(&self.comprobante.fecha_emision),
-            typst_option(&self.comprobante.periodo_desde),
-            typst_option(&self.comprobante.periodo_hasta),
-            escape_typst_string(&self.comprobante.fecha_vencimiento),
+            escape_string(&self.emisor.razon_social),
+            escape_string(&self.emisor.domicilio_comercial),
+            escape_string(&self.emisor.condicion_iva),
+            escape_string(&self.emisor.cuit),
+            escape_string(&self.emisor.ingresos_brutos),
+            escape_string(&self.emisor.inicio_actividades),
+            option_string(&self.receptor.nombre),
+            option_string(&self.receptor.domicilio),
+            escape_string(&self.receptor.condicion_iva),
+            escape_string(&self.receptor.condicion_venta),
+            option_string(&self.receptor.cuit),
+            escape_string(&self.comprobante.tipo),
+            escape_string(&self.comprobante.codigo),
+            escape_string(&self.comprobante.punto_de_venta),
+            escape_string(&self.comprobante.numero),
+            escape_string(&self.comprobante.fecha_emision),
+            option_string(&self.comprobante.periodo_desde),
+            option_string(&self.comprobante.periodo_hasta),
+            escape_string(&self.comprobante.fecha_vencimiento),
             items_str.join(", "),
             tributos_str.join(", "),
-            escape_typst_string(&self.cae.numero),
-            escape_typst_string(&self.cae.vencimiento),
+            escape_string(&self.cae.numero),
+            escape_string(&self.cae.vencimiento),
             self.neto_gravado(),
             self.total_iva(),
             self.otros_tributos_total(),
