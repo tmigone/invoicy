@@ -16,9 +16,15 @@ pub fn generate(
     let config_content = std::fs::read_to_string(&config_path)?;
     let mut config_value: Value = toml::from_str(&config_content)?;
 
+    // Extract format for schema-aware overrides
+    let format = config_value
+        .get("format")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     // Apply overrides
     for override_str in &override_args {
-        overrides::apply(&mut config_value, override_str)?;
+        overrides::apply(&mut config_value, override_str, format.as_deref())?;
     }
 
     // Deserialize to InvoiceConfig
