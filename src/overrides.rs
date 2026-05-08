@@ -1,6 +1,11 @@
 use toml::Value;
 
-pub fn apply(config: &mut Value, override_str: &str) -> Result<(), String> {
+use crate::schema;
+
+/// Apply an override to a config value
+/// The format parameter is used to look up expected types from the schema
+/// when the field doesn't exist in the config
+pub fn apply(config: &mut Value, override_str: &str, format: Option<&str>) -> Result<(), String> {
     let (key, value) = override_str.split_once('=').ok_or_else(|| {
         format!(
             "Invalid override format: '{}'. Expected KEY=VALUE",
@@ -9,8 +14,30 @@ pub fn apply(config: &mut Value, override_str: &str) -> Result<(), String> {
     })?;
 
     let existing_type = get_value_type(config, key);
-    let parsed_value = parse_value_with_hint(value, existing_type);
+
+    // If field doesn't exist in config, try to get type from schema
+    let hint = match existing_type {
+        ValueType::Unknown => {
+            if let Some(fmt) = format {
+                schema_type_to_value_type(schema::get_field_type(fmt, key))
+            } else {
+                ValueType::Unknown
+            }
+        }
+        t => t,
+    };
+
+    let parsed_value = parse_value_with_hint(value, hint);
     set_nested_value(config, key, parsed_value)
+}
+
+fn schema_type_to_value_type(schema_type: Option<String>) -> ValueType {
+    match schema_type.as_deref() {
+        Some("string") => ValueType::String,
+        Some("number") => ValueType::Float, // Use float for numbers as it's more general
+        Some("boolean") => ValueType::Boolean,
+        _ => ValueType::Unknown,
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -233,7 +260,7 @@ mod tests {
     #[test]
     fn apply_simple_string() {
         let mut config = sample_config();
-        apply(&mut config, "name=updated").unwrap();
+        apply(&mut config, "name=updated", None).unwrap();
         assert_eq!(config.get("name").unwrap().as_str().unwrap(), "updated");
     }
 
@@ -241,35 +268,35 @@ mod tests {
     fn apply_string_field_with_number_value() {
         let mut config = sample_config();
         // name is a string field, so 123 should stay as string
-        apply(&mut config, "name=123").unwrap();
+        apply(&mut config, "name=123", None).unwrap();
         assert_eq!(config.get("name").unwrap().as_str().unwrap(), "123");
     }
 
     #[test]
     fn apply_integer_field() {
         let mut config = sample_config();
-        apply(&mut config, "count=100").unwrap();
+        apply(&mut config, "count=100", None).unwrap();
         assert_eq!(config.get("count").unwrap().as_integer().unwrap(), 100);
     }
 
     #[test]
     fn apply_float_field() {
         let mut config = sample_config();
-        apply(&mut config, "price=19.99").unwrap();
+        apply(&mut config, "price=19.99", None).unwrap();
         assert_eq!(config.get("price").unwrap().as_float().unwrap(), 19.99);
     }
 
     #[test]
     fn apply_boolean_field() {
         let mut config = sample_config();
-        apply(&mut config, "enabled=false").unwrap();
+        apply(&mut config, "enabled=false", None).unwrap();
         assert_eq!(config.get("enabled").unwrap().as_bool().unwrap(), false);
     }
 
     #[test]
     fn apply_nested_value() {
         let mut config = sample_config();
-        apply(&mut config, "nested.value=changed").unwrap();
+        apply(&mut config, "nested.value=changed", None).unwrap();
         assert_eq!(
             config
                 .get("nested")
@@ -285,7 +312,7 @@ mod tests {
     #[test]
     fn apply_array_element() {
         let mut config = sample_config();
-        apply(&mut config, "items[0].desc=modified").unwrap();
+        apply(&mut config, "items[0].desc=modified", None).unwrap();
         assert_eq!(
             config.get("items").unwrap().as_array().unwrap()[0]
                 .get("desc")
@@ -299,7 +326,7 @@ mod tests {
     #[test]
     fn apply_array_element_integer() {
         let mut config = sample_config();
-        apply(&mut config, "items[1].qty=99").unwrap();
+        apply(&mut config, "items[1].qty=99", None).unwrap();
         assert_eq!(
             config.get("items").unwrap().as_array().unwrap()[1]
                 .get("qty")
@@ -313,7 +340,7 @@ mod tests {
     #[test]
     fn apply_invalid_format() {
         let mut config = sample_config();
-        let result = apply(&mut config, "invalid");
+        let result = apply(&mut config, "invalid", None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid override format"));
     }
@@ -321,7 +348,51 @@ mod tests {
     #[test]
     fn apply_missing_key() {
         let mut config = sample_config();
-        let result = apply(&mut config, "nonexistent.field=value");
+        let result = apply(&mut config, "nonexistent.field=value", None);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn apply_missing_field_with_schema_hint() {
+        // Config with format but missing invoice.number
+        let mut config: Value = toml::from_str(
+            r#"
+            format = "generic"
+            [company]
+            name = "Test"
+            address = "123 St"
+            address2 = ""
+            city_state_zip = "City, ST 12345"
+            country = "USA"
+            [client]
+            name = "Client"
+            address = "456 Ave"
+            address2 = ""
+            city_state_zip = "Town, ST 67890"
+            country = "USA"
+            [invoice]
+            date = "2025-01-01"
+            due_date = "2025-01-15"
+            currency = "USD"
+            [[items]]
+            description = "Service"
+            rate = 100.0
+            "#,
+        )
+        .unwrap();
+
+        // Without schema hint, 123 would become an integer
+        // With schema hint, it should stay as string since invoice.number is String type
+        apply(&mut config, "invoice.number=123", Some("generic")).unwrap();
+
+        let number = config
+            .get("invoice")
+            .unwrap()
+            .get("number")
+            .unwrap();
+
+        // Should be a string, not an integer
+        assert!(number.is_str(), "invoice.number should be a string");
+        assert_eq!(number.as_str().unwrap(), "123");
     }
 }

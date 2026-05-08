@@ -223,6 +223,64 @@ fn normalize_type(typ: &str) -> String {
     }
 }
 
+/// Get a map of field paths to their types for a schema
+pub fn get_field_types<T: JsonSchema>() -> std::collections::HashMap<String, String> {
+    let root_schema = schema_for!(T);
+    let json = serde_json::to_value(&root_schema).expect("Failed to serialize schema");
+    let definitions = json
+        .get("$defs")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
+
+    let mut fields = Vec::new();
+    extract_fields(&json, &definitions, "", &mut fields);
+
+    fields.into_iter().map(|f| (f.path, f.typ)).collect()
+}
+
+/// Look up the expected type for a field path given a format name
+pub fn get_field_type(format: &str, path: &str) -> Option<String> {
+    use crate::formats::{AfipAInvoice, AfipCInvoice, GenericInvoice};
+
+    let types = match format {
+        "generic" => get_field_types::<GenericInvoice>(),
+        "afip_c" => get_field_types::<AfipCInvoice>(),
+        "afip_a" => get_field_types::<AfipAInvoice>(),
+        _ => return None,
+    };
+
+    // Try exact match first
+    if let Some(typ) = types.get(path) {
+        return Some(typ.clone());
+    }
+
+    // Try array item match (e.g., "items[0].description" -> "items[].description")
+    let normalized = normalize_array_path(path);
+    types.get(&normalized).cloned()
+}
+
+/// Convert "items[0].field" to "items[].field" for schema lookup
+fn normalize_array_path(path: &str) -> String {
+    let mut result = String::new();
+    let mut chars = path.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '[' {
+            result.push('[');
+            // Skip digits until ]
+            while let Some(&next) = chars.peek() {
+                if next == ']' {
+                    break;
+                }
+                chars.next();
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 pub fn print_schema<T: JsonSchema>(format_name: &str) {
     let root_schema = schema_for!(T);
     let json = serde_json::to_value(&root_schema).expect("Failed to serialize schema");
