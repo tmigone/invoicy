@@ -385,11 +385,7 @@ mod tests {
         // With schema hint, it should stay as string since invoice.number is String type
         apply(&mut config, "invoice.number=123", Some("generic")).unwrap();
 
-        let number = config
-            .get("invoice")
-            .unwrap()
-            .get("number")
-            .unwrap();
+        let number = config.get("invoice").unwrap().get("number").unwrap();
 
         // Should be a string, not an integer
         assert!(number.is_str(), "invoice.number should be a string");
