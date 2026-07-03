@@ -1,0 +1,22 @@
+[package]
+name = "afip"
+description = "Native Rust SDK for Argentina's ARCA/AFIP web services (WSAA + WSFEv1 electronic invoicing)"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP (blocking is plenty for a sequential CLI flow)
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }
+# XML: hand-built request envelopes, roxmltree for parsing responses
+roxmltree = "0.21"
+# X.509 cert/CSR generation + PKCS#7/CMS signing for the WSAA login ticket.
+# `vendored` builds OpenSSL from source so we don't depend on the host's
+# (Libre)SSL headers — important on macOS.
+openssl = { version = "0.10", features = ["vendored"] }
+base64 = "0.22"

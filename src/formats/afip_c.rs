@@ -9,7 +9,66 @@ pub struct AfipCInvoice {
     pub receptor: Receptor,
     pub comprobante: Comprobante,
     pub items: Vec<LineItem>,
+    #[serde(default = "default_cae")]
     pub cae: Cae,
+    /// AFIP web-service codes used by `facturar` (ignored by `generate`).
+    #[serde(default)]
+    pub afip: Option<AfipParams>,
+}
+
+fn default_cae() -> Cae {
+    Cae {
+        numero: String::new(),
+        vencimiento: String::new(),
+    }
+}
+
+/// WSFE-specific codes for `facturar`. Defaults to a consumidor-final sale of
+/// products.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct AfipParams {
+    #[serde(default)]
+    pub concepto: ConceptoParam,
+    #[serde(default)]
+    pub doc_tipo: DocTipoParam,
+    #[serde(default)]
+    pub doc_nro: u64,
+    #[serde(default = "default_cond_iva")]
+    pub cond_iva_receptor: u8,
+}
+
+fn default_cond_iva() -> u8 {
+    5
+}
+
+impl Default for AfipParams {
+    fn default() -> Self {
+        Self {
+            concepto: ConceptoParam::default(),
+            doc_tipo: DocTipoParam::default(),
+            doc_nro: 0,
+            cond_iva_receptor: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConceptoParam {
+    #[default]
+    Productos,
+    Servicios,
+    ProductosYServicios,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DocTipoParam {
+    #[default]
+    ConsumidorFinal,
+    Cuit,
+    Cuil,
+    Dni,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -70,7 +129,7 @@ impl AfipCInvoice {
         0.0
     }
 
-    fn total(&self) -> f64 {
+    pub fn total(&self) -> f64 {
         self.subtotal() + self.otros_tributos()
     }
 

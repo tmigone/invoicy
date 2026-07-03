@@ -1,12 +1,14 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use toml::Value;
 
+use crate::afip_invoice;
 use crate::formats::InvoiceConfig;
 use crate::overrides;
 use crate::world;
 
 pub fn generate(
+    home: &Path,
     config_path: PathBuf,
     template: Option<PathBuf>,
     output: Option<PathBuf>,
@@ -25,6 +27,14 @@ pub fn generate(
     // Apply overrides
     for override_str in &override_args {
         overrides::apply(&mut config_value, override_str, format.as_deref())?;
+    }
+
+    // For an afip_c invoice with no CAE yet, authorize against AFIP first
+    // (this assigns número + fecha + CAE). If a CAE is already present we skip
+    // authorization and just re-render, so re-running never duplicates a
+    // comprobante.
+    if format.as_deref() == Some("afip_c") && !afip_invoice::has_cae(&config_value) {
+        afip_invoice::authorize(home, &mut config_value)?;
     }
 
     // Deserialize to InvoiceConfig

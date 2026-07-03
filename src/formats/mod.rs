@@ -5,7 +5,7 @@ mod generic;
 use serde::Deserialize;
 
 pub use afip_a::AfipAInvoice;
-pub use afip_c::AfipCInvoice;
+pub use afip_c::{AfipCInvoice, ConceptoParam, DocTipoParam};
 pub use generic::GenericInvoice;
 
 #[derive(Debug, Deserialize)]
