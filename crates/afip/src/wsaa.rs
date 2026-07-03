@@ -120,8 +120,8 @@ pub fn login(
     xml::check_soap_fault(&body, "WSAA")?;
 
     // `loginCmsReturn` holds the (entity-escaped) loginTicketResponse XML.
-    let inner = xml::first_text(&body, "loginCmsReturn")
-        .ok_or(Error::MissingField("loginCmsReturn"))?;
+    let inner =
+        xml::first_text(&body, "loginCmsReturn").ok_or(Error::MissingField("loginCmsReturn"))?;
 
     let token = xml::first_text(&inner, "token").ok_or(Error::MissingField("token"))?;
     let sign = xml::first_text(&inner, "sign").ok_or(Error::MissingField("sign"))?;

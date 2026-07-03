@@ -165,7 +165,9 @@ pub fn get_voucher(
         tipo: tipo.code(),
         punto_venta,
         fecha: field("CbteFch").and_then(|s| s.parse().ok()).unwrap_or(0),
-        importe_total: field("ImpTotal").and_then(|s| s.parse().ok()).unwrap_or(0.0),
+        importe_total: field("ImpTotal")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0),
         doc_tipo: field("DocTipo").and_then(|s| s.parse().ok()).unwrap_or(0),
         doc_nro: field("DocNro").and_then(|s| s.parse().ok()).unwrap_or(0),
         cae: field("CodAutorizacion").filter(|s| !s.is_empty()),

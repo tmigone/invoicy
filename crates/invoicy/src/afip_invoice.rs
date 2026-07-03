@@ -38,7 +38,10 @@ pub fn authorize(home: &Path, value: &mut Value) -> Result<(), BoxError> {
     }
 
     let concepto = concepto_to_afip(params.concepto);
-    let needs_dates = matches!(concepto, Concepto::Servicios | Concepto::ProductosYServicios);
+    let needs_dates = matches!(
+        concepto,
+        Concepto::Servicios | Concepto::ProductosYServicios
+    );
     let (desde, hasta, vto) = if needs_dates {
         (
             inv.comprobante
@@ -72,9 +75,24 @@ pub fn authorize(home: &Path, value: &mut Value) -> Result<(), BoxError> {
     let res = client.create_factura_c(&factura)?;
 
     let vto_cae = yyyymmdd_str_to_ddmmyyyy(&res.cae_vencimiento);
-    set_str(value, "comprobante", "punto_de_venta", &format!("{:05}", res.punto_venta));
-    set_str(value, "comprobante", "numero", &format!("{:08}", res.numero));
-    set_str(value, "comprobante", "fecha_emision", &yyyymmdd_to_ddmmyyyy(res.fecha));
+    set_str(
+        value,
+        "comprobante",
+        "punto_de_venta",
+        &format!("{:05}", res.punto_venta),
+    );
+    set_str(
+        value,
+        "comprobante",
+        "numero",
+        &format!("{:08}", res.numero),
+    );
+    set_str(
+        value,
+        "comprobante",
+        "fecha_emision",
+        &yyyymmdd_to_ddmmyyyy(res.fecha),
+    );
     set_str(value, "cae", "numero", &res.cae);
     set_str(value, "cae", "vencimiento", &vto_cae);
 

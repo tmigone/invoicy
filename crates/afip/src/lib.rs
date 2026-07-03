@@ -131,12 +131,7 @@ impl Client {
 
     /// Fetch vouchers `from..=to` (inclusive). One WSFE call per number,
     /// authenticating only once.
-    pub fn list_vouchers(
-        &self,
-        tipo: VoucherType,
-        from: u64,
-        to: u64,
-    ) -> Result<Vec<VoucherInfo>> {
+    pub fn list_vouchers(&self, tipo: VoucherType, from: u64, to: u64) -> Result<Vec<VoucherInfo>> {
         let creds = self.authenticate()?;
         let url = self.config.environment.wsfe_url();
         let mut out = Vec::new();
@@ -161,7 +156,6 @@ impl Client {
 }
 
 fn read_pem(path: &Path, what: &str) -> Result<Vec<u8>> {
-    std::fs::read(path).map_err(|e| {
-        Error::Config(format!("cannot read {what} at {}: {e}", path.display()))
-    })
+    std::fs::read(path)
+        .map_err(|e| Error::Config(format!("cannot read {what} at {}: {e}", path.display())))
 }

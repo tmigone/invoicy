@@ -82,7 +82,11 @@ pub fn configure(
     println!("✔ Configuración guardada en {}", path.display());
     println!(
         "  entorno: {}",
-        if production { "producción" } else { "homologación" }
+        if production {
+            "producción"
+        } else {
+            "homologación"
+        }
     );
     println!("  Siguiente: `invoicy afip generate-certificate`");
     Ok(())
@@ -115,8 +119,13 @@ pub fn generate_certificate(home: &Path, alias: &str, force: bool) -> R {
     println!("Pasos siguientes (manual, una sola vez):");
     println!("  1. Ingresá al portal de ARCA → «Administración de Certificados Digitales».");
     println!("  2. Subí {}.", csr_path.display());
-    println!("  3. Descargá el certificado emitido a {}.", cfg.cert_path.display());
-    println!("  4. Asociá el certificado a «Facturación Electrónica» (WSFE) en «Administrador de Relaciones».");
+    println!(
+        "  3. Descargá el certificado emitido a {}.",
+        cfg.cert_path.display()
+    );
+    println!(
+        "  4. Asociá el certificado a «Facturación Electrónica» (WSFE) en «Administrador de Relaciones»."
+    );
     Ok(())
 }
 
@@ -130,7 +139,10 @@ pub fn status(home: &Path) -> R {
 pub fn last_voucher(home: &Path) -> R {
     let client = load_client(home)?;
     let n = client.last_voucher(VoucherType::FacturaC)?;
-    println!("Último comprobante autorizado (Factura C): {n} (siguiente: {})", n + 1);
+    println!(
+        "Último comprobante autorizado (Factura C): {n} (siguiente: {})",
+        n + 1
+    );
     Ok(())
 }
 
