@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use toml::Value;
 
 use crate::afip_invoice;
+use crate::emisor::EmisorProfile;
 use crate::formats::InvoiceConfig;
 use crate::overrides;
 use crate::world;
@@ -29,12 +30,22 @@ pub fn generate(
         overrides::apply(&mut config_value, override_str, format.as_deref())?;
     }
 
-    // For an afip_c invoice with no CAE yet, authorize against AFIP first
-    // (this assigns número + fecha + CAE). If a CAE is already present we skip
-    // authorization and just re-render, so re-running never duplicates a
-    // comprobante.
-    if format.as_deref() == Some("afip_c") && !afip_invoice::has_cae(&config_value) {
-        afip_invoice::authorize(home, &mut config_value)?;
+    // afip_c invoices pull the emisor from the shared profile and, when they
+    // have no CAE yet, get authorized against AFIP first (assigning número +
+    // fecha + CAE). A TOML that already carries [emisor] and/or a CAE keeps
+    // them, so re-running never duplicates a comprobante.
+    if format.as_deref() == Some("afip_c") {
+        let need_emisor = !afip_invoice::has_emisor(&config_value);
+        let need_auth = !afip_invoice::has_cae(&config_value);
+        if need_emisor || need_auth {
+            let profile = EmisorProfile::load(home)?;
+            if need_emisor {
+                afip_invoice::inject_emisor(&mut config_value, &profile);
+            }
+            if need_auth {
+                afip_invoice::authorize(&profile, home, &mut config_value)?;
+            }
+        }
     }
 
     // Deserialize to InvoiceConfig

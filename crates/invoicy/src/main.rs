@@ -2,10 +2,11 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use commands::afip::{self, CondicionIvaArg};
+use commands::afip;
 
 mod afip_invoice;
 mod commands;
+mod emisor;
 mod formats;
 mod overrides;
 mod schema;
@@ -67,16 +68,26 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum AfipCommand {
-    /// Create the AFIP issuer config (emisor_config.json).
+    /// Create the emisor profile (emisor.toml).
     Configure {
         #[arg(long)]
         cuit: u64,
         #[arg(long)]
-        punto_venta: u32,
-        #[arg(long)]
         razon_social: String,
-        #[arg(long, value_enum, default_value_t = CondicionIvaArg::Monotributo)]
-        condicion_iva: CondicionIvaArg,
+        #[arg(long)]
+        punto_venta: u32,
+        /// Issuer's condición frente al IVA (shown on the PDF).
+        #[arg(long, default_value = "Responsable Monotributo")]
+        condicion_iva: String,
+        /// Commercial address (shown on the PDF).
+        #[arg(long, default_value = "")]
+        domicilio: String,
+        /// Ingresos brutos (shown on the PDF).
+        #[arg(long, default_value = "")]
+        ingresos_brutos: String,
+        /// Business start date, DD/MM/YYYY (shown on the PDF).
+        #[arg(long, default_value = "")]
+        inicio_actividades: String,
         /// Target the real production environment (default: homologación/testing).
         #[arg(long)]
         production: bool,
@@ -125,16 +136,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Afip { command } => match command {
             AfipCommand::Configure {
                 cuit,
-                punto_venta,
                 razon_social,
+                punto_venta,
                 condicion_iva,
+                domicilio,
+                ingresos_brutos,
+                inicio_actividades,
                 production,
             } => afip::configure(
                 &home,
                 cuit,
+                razon_social,
                 punto_venta,
-                &razon_social,
-                condicion_iva.into(),
+                condicion_iva,
+                domicilio,
+                ingresos_brutos,
+                inicio_actividades,
                 production,
             ),
             AfipCommand::GenerateCertificate { alias, force } => {

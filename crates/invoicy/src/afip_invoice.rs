@@ -10,7 +10,7 @@ use std::path::Path;
 use afip::{Concepto, DocTipo, FacturaC};
 use toml::Value;
 
-use crate::commands::afip::load_client;
+use crate::emisor::EmisorProfile;
 use crate::formats::{AfipCInvoice, ConceptoParam, DocTipoParam};
 
 type BoxError = Box<dyn std::error::Error>;
@@ -25,8 +25,20 @@ pub fn has_cae(value: &Value) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the TOML carries its own `[emisor]` block (an override).
+pub fn has_emisor(value: &Value) -> bool {
+    value.get("emisor").is_some()
+}
+
+/// Inject the emisor profile as the `[emisor]` table (invoice omitted it).
+pub fn inject_emisor(value: &mut Value, profile: &EmisorProfile) {
+    if let Some(root) = value.as_table_mut() {
+        root.insert("emisor".to_string(), Value::Table(profile.emisor_table()));
+    }
+}
+
 /// Authorize the invoice against WSFE and fold the result into `value`.
-pub fn authorize(home: &Path, value: &mut Value) -> Result<(), BoxError> {
+pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Result<(), BoxError> {
     ensure_placeholders(value);
 
     // Deserialize a copy to compute the total and read AFIP params / dates.
@@ -70,7 +82,7 @@ pub fn authorize(home: &Path, value: &mut Value) -> Result<(), BoxError> {
         condicion_iva_receptor: params.cond_iva_receptor,
     };
 
-    let client = load_client(home)?;
+    let client = profile.client(home)?;
     println!("Solicitando CAE a WSFE (total ${total:.2})…");
     let res = client.create_factura_c(&factura)?;
 

@@ -1,34 +1,16 @@
 //! AFIP/ARCA web-service commands (authorization side).
 //!
-//! These drive the `afip` crate (WSAA + WSFEv1) and share an issuer config +
-//! credential cache under a working directory (`--home`). They are exposed
-//! under the `invoicy afip <command>` subcommand.
+//! These drive the `afip` crate (WSAA + WSFEv1) via the shared emisor profile
+//! (`emisor.toml` under `--home`). Exposed under `invoicy afip <command>`.
 
 use std::path::{Path, PathBuf};
 
-use afip::{Client, CondicionIva, EmisorConfig, Environment, VoucherType};
-use clap::ValueEnum;
+use afip::{Client, Environment, VoucherType};
+
+use crate::emisor::EmisorProfile;
 
 type BoxError = Box<dyn std::error::Error>;
 type R = Result<(), BoxError>;
-
-/// Issuer's condición frente al IVA (for `afip configure`).
-#[derive(Copy, Clone, Debug, ValueEnum)]
-pub enum CondicionIvaArg {
-    Monotributo,
-    ResponsableInscripto,
-    Exento,
-}
-
-impl From<CondicionIvaArg> for CondicionIva {
-    fn from(v: CondicionIvaArg) -> Self {
-        match v {
-            CondicionIvaArg::Monotributo => CondicionIva::Monotributo,
-            CondicionIvaArg::ResponsableInscripto => CondicionIva::ResponsableInscripto,
-            CondicionIvaArg::Exento => CondicionIva::Exento,
-        }
-    }
-}
 
 /// Resolve the working directory: `--home`, then `$AFIP_HOME`, then `~/invoicy`.
 pub fn resolve_home(cli_home: Option<PathBuf>) -> PathBuf {
@@ -42,33 +24,31 @@ pub fn resolve_home(cli_home: Option<PathBuf>) -> PathBuf {
     PathBuf::from(base).join("invoicy")
 }
 
-fn config_path(home: &Path) -> PathBuf {
-    home.join("emisor_config.json")
-}
-
 pub fn load_client(home: &Path) -> Result<Client, BoxError> {
-    let cfg = EmisorConfig::load(config_path(home)).map_err(|e| {
-        format!(
-            "no se pudo cargar emisor_config.json — ejecutá `invoicy afip configure` primero ({e})"
-        )
-    })?;
-    Ok(Client::new(cfg, home.join("cache"))?)
+    EmisorProfile::load(home)?.client(home)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn configure(
     home: &Path,
     cuit: u64,
+    razon_social: String,
     punto_venta: u32,
-    razon_social: &str,
-    condicion_iva: CondicionIva,
+    condicion_iva: String,
+    domicilio_comercial: String,
+    ingresos_brutos: String,
+    inicio_actividades: String,
     production: bool,
 ) -> R {
     std::fs::create_dir_all(home.join("certs"))?;
-    let cfg = EmisorConfig {
+    let profile = EmisorProfile {
         cuit,
-        punto_venta,
-        razon_social: razon_social.to_string(),
+        razon_social,
+        domicilio_comercial,
         condicion_iva,
+        ingresos_brutos,
+        inicio_actividades,
+        punto_venta,
         environment: if production {
             Environment::Produccion
         } else {
@@ -77,9 +57,11 @@ pub fn configure(
         cert_path: home.join("certs/invoicy.crt"),
         key_path: home.join("certs/invoicy.key"),
     };
-    let path = config_path(home);
-    cfg.save(&path)?;
-    println!("✔ Configuración guardada en {}", path.display());
+    profile.save(home)?;
+    println!(
+        "✔ Perfil de emisor guardado en {}",
+        EmisorProfile::path(home).display()
+    );
     println!(
         "  entorno: {}",
         if production {
@@ -93,8 +75,7 @@ pub fn configure(
 }
 
 pub fn generate_certificate(home: &Path, alias: &str, force: bool) -> R {
-    let cfg = EmisorConfig::load(config_path(home))
-        .map_err(|e| format!("ejecutá `invoicy afip configure` primero ({e})"))?;
+    let profile = EmisorProfile::load(home)?;
 
     let certs_dir = home.join("certs");
     std::fs::create_dir_all(&certs_dir)?;
@@ -109,7 +90,7 @@ pub fn generate_certificate(home: &Path, alias: &str, force: bool) -> R {
         .into());
     }
 
-    let out = afip::cert::generate_key_and_csr(cfg.cuit, &cfg.razon_social, alias)?;
+    let out = afip::cert::generate_key_and_csr(profile.cuit, &profile.razon_social, alias)?;
     std::fs::write(&key_path, out.private_key_pem)?;
     std::fs::write(&csr_path, out.csr_pem)?;
 
@@ -121,7 +102,7 @@ pub fn generate_certificate(home: &Path, alias: &str, force: bool) -> R {
     println!("  2. Subí {}.", csr_path.display());
     println!(
         "  3. Descargá el certificado emitido a {}.",
-        cfg.cert_path.display()
+        profile.cert_path.display()
     );
     println!(
         "  4. Asociá el certificado a «Facturación Electrónica» (WSFE) en «Administrador de Relaciones»."

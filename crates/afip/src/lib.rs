@@ -5,7 +5,7 @@
 //! - [`wsaa`] — authenticate (CMS-signed login ticket) and cache credentials.
 //! - [`wsfe`] — query the last voucher and request a CAE.
 //!
-//! The [`Client`] type wires these together against an [`EmisorConfig`].
+//! The [`Client`] type wires these together against a [`ClientConfig`].
 
 mod error;
 mod xml;
@@ -16,7 +16,7 @@ pub mod types;
 pub mod wsaa;
 pub mod wsfe;
 
-pub use config::{CondicionIva, EmisorConfig, Environment};
+pub use config::{ClientConfig, Environment};
 pub use error::{Error, Result};
 pub use types::{CaeResult, Concepto, DocTipo, FacturaC, VoucherInfo, VoucherType};
 pub use wsaa::Credentials;
@@ -28,14 +28,14 @@ const SERVICE_WSFE: &str = "wsfe";
 
 /// High-level client bound to a single issuer configuration.
 pub struct Client {
-    config: EmisorConfig,
+    config: ClientConfig,
     http: reqwest::blocking::Client,
     cache_dir: PathBuf,
 }
 
 impl Client {
     /// Build a client. `cache_dir` is where the WSAA credential cache lives.
-    pub fn new(config: EmisorConfig, cache_dir: impl Into<PathBuf>) -> Result<Self> {
+    pub fn new(config: ClientConfig, cache_dir: impl Into<PathBuf>) -> Result<Self> {
         let http = reqwest::blocking::Client::builder()
             .user_agent(concat!("afip-rs/", env!("CARGO_PKG_VERSION")))
             .build()?;
@@ -46,7 +46,7 @@ impl Client {
         })
     }
 
-    pub fn config(&self) -> &EmisorConfig {
+    pub fn config(&self) -> &ClientConfig {
         &self.config
     }
 
