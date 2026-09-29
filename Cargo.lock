@@ -17,6 +17,7 @@ dependencies = [
  "openssl",
  "reqwest",
  "roxmltree 0.21.1",
+ "schemars",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1382,15 +1383,11 @@ name = "invoicy"
 version = "0.1.0"
 dependencies = [
  "afip",
- "chrono",
  "clap",
- "dirs",
- "schemars",
+ "renderer",
+ "schema",
  "serde",
- "serde_json",
  "toml",
- "typst",
- "typst-pdf",
 ]
 
 [[package]]
@@ -2257,6 +2254,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
+name = "renderer"
+version = "0.1.0"
+dependencies = [
+ "afip",
+ "chrono",
+ "dirs",
+ "schema",
+ "serde",
+ "serde_json",
+ "toml",
+ "typst",
+ "typst-pdf",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2494,6 +2506,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91c1b7e4904c873ef0710c1f407dde2e6287de2bebc1bbbf7d430bb7cbffd939"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "schema"
+version = "0.1.0"
+dependencies = [
+ "afip",
+ "schemars",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]

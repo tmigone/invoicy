@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 
+use schema::InvoiceConfig;
 use toml::Value;
 
 use crate::afip_invoice;
 use crate::emisor::EmisorProfile;
-use crate::formats::InvoiceConfig;
 use crate::overrides;
-use crate::world;
 
 pub fn generate(
     home: &Path,
@@ -51,22 +50,16 @@ pub fn generate(
     // Deserialize to InvoiceConfig
     let config: InvoiceConfig = config_value.try_into()?;
 
-    // Get template (from file or built-in)
-    let template_content = match &template {
-        Some(path) => std::fs::read_to_string(path)?,
-        None => config.default_template().to_string(),
-    };
-
-    // Generate data definition + template
-    let full_source = format!("{}\n{}", config.to_typst_dict(), template_content);
+    // Custom template from file, or the format's built-in one
+    let template_content = template.map(std::fs::read_to_string).transpose()?;
 
     // Determine output path (auto-increment if exists)
     let base_path =
         output.unwrap_or_else(|| PathBuf::from(format!("invoice-{}.pdf", config.invoice_number())));
     let output_path = unique_path(base_path);
 
-    // Compile to PDF
-    let pdf_bytes = world::compile_to_pdf(&full_source)?;
+    // Render to PDF
+    let pdf_bytes = renderer::render(&config, template_content.as_deref())?;
 
     // Write output
     std::fs::write(&output_path, pdf_bytes)?;

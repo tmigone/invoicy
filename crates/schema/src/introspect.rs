@@ -1,13 +1,24 @@
+//! Flatten a format's JSON schema into dotted field paths and simple types.
+//!
+//! Paths use `a.b` for nested tables and `items[].x` for array elements, the
+//! same shape `--set` overrides take (with `[]` standing for any index).
+
 use schemars::{JsonSchema, schema_for};
 use serde_json::Value;
 
-struct FieldInfo {
-    path: String,
-    typ: String,
-    optional: bool,
+use crate::{AfipAInvoice, AfipCInvoice, GenericInvoice};
+
+/// One leaf field of a format.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Field {
+    /// Dotted path, e.g. `comprobante.numero` or `items[].subtotal`.
+    pub path: String,
+    /// `string`, `number`, `boolean`, … (JSON-schema type names).
+    pub typ: String,
+    pub optional: bool,
 }
 
-fn extract_fields(schema: &Value, definitions: &Value, prefix: &str, fields: &mut Vec<FieldInfo>) {
+fn extract_fields(schema: &Value, definitions: &Value, prefix: &str, fields: &mut Vec<Field>) {
     let Some(obj) = schema.as_object() else {
         return;
     };
@@ -30,6 +41,8 @@ fn extract_fields(schema: &Value, definitions: &Value, prefix: &str, fields: &mu
             .unwrap_or_default();
 
         for (name, prop_schema) in properties {
+            // `Option<Struct>` is `anyOf: [<struct>, null]`; look through it.
+            let prop_schema = non_null_variant(prop_schema).unwrap_or(prop_schema);
             let path = if prefix.is_empty() {
                 name.clone()
             } else {
@@ -46,7 +59,7 @@ fn extract_fields(schema: &Value, definitions: &Value, prefix: &str, fields: &mu
                 extract_optional_array_fields(prop_schema, definitions, &path, fields);
             } else {
                 let typ = get_type_name(prop_schema, definitions);
-                fields.push(FieldInfo {
+                fields.push(Field {
                     path,
                     typ,
                     optional: is_optional,
@@ -56,11 +69,21 @@ fn extract_fields(schema: &Value, definitions: &Value, prefix: &str, fields: &mu
     }
 }
 
+/// The single non-null alternative of an `anyOf`, if that is its shape.
+fn non_null_variant(schema: &Value) -> Option<&Value> {
+    let any_of = schema.get("anyOf")?.as_array()?;
+    let mut variants = any_of
+        .iter()
+        .filter(|v| v.get("type").and_then(Value::as_str) != Some("null"));
+    let variant = variants.next()?;
+    variants.next().is_none().then_some(variant)
+}
+
 fn extract_array_fields(
     schema: &Value,
     definitions: &Value,
     prefix: &str,
-    fields: &mut Vec<FieldInfo>,
+    fields: &mut Vec<Field>,
 ) {
     let Some(obj) = schema.as_object() else {
         return;
@@ -147,7 +170,7 @@ fn extract_optional_array_fields(
     schema: &Value,
     definitions: &Value,
     prefix: &str,
-    fields: &mut Vec<FieldInfo>,
+    fields: &mut Vec<Field>,
 ) {
     let Some(obj) = schema.as_object() else {
         return;
@@ -223,8 +246,8 @@ fn normalize_type(typ: &str) -> String {
     }
 }
 
-/// Get a map of field paths to their types for a schema
-pub fn get_field_types<T: JsonSchema>() -> std::collections::HashMap<String, String> {
+/// All leaf fields of `T`, in schema order.
+pub fn fields<T: JsonSchema>() -> Vec<Field> {
     let root_schema = schema_for!(T);
     let json = serde_json::to_value(&root_schema).expect("Failed to serialize schema");
     let definitions = json
@@ -234,29 +257,31 @@ pub fn get_field_types<T: JsonSchema>() -> std::collections::HashMap<String, Str
 
     let mut fields = Vec::new();
     extract_fields(&json, &definitions, "", &mut fields);
+    fields
+}
 
-    fields.into_iter().map(|f| (f.path, f.typ)).collect()
+/// All leaf fields of the format called `format`, or `None` if unknown.
+pub fn format_fields(format: &str) -> Option<Vec<Field>> {
+    match format {
+        "generic" => Some(fields::<GenericInvoice>()),
+        "afip_c" => Some(fields::<AfipCInvoice>()),
+        "afip_a" => Some(fields::<AfipAInvoice>()),
+        _ => None,
+    }
 }
 
 /// Look up the expected type for a field path given a format name
-pub fn get_field_type(format: &str, path: &str) -> Option<String> {
-    use crate::formats::{AfipAInvoice, AfipCInvoice, GenericInvoice};
+pub fn field_type(format: &str, path: &str) -> Option<String> {
+    let fields = format_fields(format)?;
 
-    let types = match format {
-        "generic" => get_field_types::<GenericInvoice>(),
-        "afip_c" => get_field_types::<AfipCInvoice>(),
-        "afip_a" => get_field_types::<AfipAInvoice>(),
-        _ => return None,
-    };
-
-    // Try exact match first
-    if let Some(typ) = types.get(path) {
-        return Some(typ.clone());
-    }
-
-    // Try array item match (e.g., "items[0].description" -> "items[].description")
+    // Try exact match first, then array item match
+    // (e.g., "items[0].description" -> "items[].description")
     let normalized = normalize_array_path(path);
-    types.get(&normalized).cloned()
+    fields
+        .iter()
+        .find(|f| f.path == path)
+        .or_else(|| fields.iter().find(|f| f.path == normalized))
+        .map(|f| f.typ.clone())
 }
 
 /// Convert "items[0].field" to "items[].field" for schema lookup
@@ -279,31 +304,4 @@ fn normalize_array_path(path: &str) -> String {
         }
     }
     result
-}
-
-pub fn print_schema<T: JsonSchema>(format_name: &str) {
-    let root_schema = schema_for!(T);
-    let json = serde_json::to_value(&root_schema).expect("Failed to serialize schema");
-    let definitions = json
-        .get("$defs")
-        .cloned()
-        .unwrap_or(Value::Object(Default::default()));
-
-    let mut fields = Vec::new();
-    extract_fields(&json, &definitions, "", &mut fields);
-
-    println!("Format: {}\n", format_name);
-
-    let max_path_len = fields.iter().map(|f| f.path.len()).max().unwrap_or(0);
-
-    for field in fields {
-        let optional = if field.optional { " (optional)" } else { "" };
-        println!(
-            "  {:<width$}  {}{}",
-            field.path,
-            field.typ,
-            optional,
-            width = max_path_len
-        );
-    }
 }

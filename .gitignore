@@ -4,3 +4,5 @@
 
 # Real data (not examples)
 examples/real*.toml
+
+home/

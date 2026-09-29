@@ -1,5 +1,6 @@
 // AFIP Factura Template with IVA breakdown (Argentina - Responsable Inscripto)
-// Data is injected via #let invoice-data = (...) before this file
+// Data is injected via #let invoice-data = json("data.json") before this file;
+// field names match the TOML (see `invoicy schema <format>`).
 
 #set page(
   paper: "a4",
@@ -146,7 +147,7 @@
           [#format-number(item.cantidad)],
           [#item.unidad],
           [#format-number(item.precio_unitario)],
-          [#format-number(item.bonif_pct)],
+          [#format-number(item.bonificacion_porcentaje)],
           [#format-number(item.subtotal)],
           [#format-number(item.alicuota_iva)],
           [#format-number(item.subtotal_con_iva)],

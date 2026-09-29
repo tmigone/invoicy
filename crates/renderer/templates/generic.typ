@@ -1,5 +1,6 @@
 // Invoice Template
-// Data is injected via #let invoice-data = (...) before this file
+// Data is injected via #let invoice-data = json("data.json") before this file;
+// field names match the TOML (see `invoicy schema <format>`).
 
 #set page(
   paper: "a4",

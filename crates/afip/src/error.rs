@@ -6,15 +6,19 @@ pub enum Error {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[cfg(feature = "client")]
     #[error("OpenSSL error: {0}")]
     OpenSsl(#[from] openssl::error::ErrorStack),
 
+    #[cfg(feature = "client")]
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
+    #[cfg(feature = "client")]
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[cfg(feature = "client")]
     #[error("XML parse error: {0}")]
     Xml(#[from] roxmltree::Error),
 

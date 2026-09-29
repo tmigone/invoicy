@@ -252,7 +252,7 @@ pub fn create_factura_c(
         concepto = factura.concepto.code(),
         doc_tipo = factura.doc_tipo.code(),
         doc_nro = factura.doc_nro,
-        cond_iva = factura.condicion_iva_receptor,
+        cond_iva = factura.condicion_iva_receptor.code(),
     );
 
     let resp = post(http, url, "FECAESolicitar", body)?;

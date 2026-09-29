@@ -1,22 +1,25 @@
-use crate::formats::{AfipAInvoice, AfipCInvoice, GenericInvoice};
-use crate::schema;
+use schema::{FORMATS, introspect};
 
 pub fn schema(format: &str) -> Result<(), Box<dyn std::error::Error>> {
-    match format {
-        "list" => {
-            println!("Available formats:\n");
-            println!("  generic  - Simple international invoice");
-            println!("  afip_c   - Argentina AFIP Factura C (Monotributo)");
-            println!("  afip_a   - Argentina AFIP Factura A (Responsable Inscripto)");
+    if format == "list" {
+        println!("Available formats:\n");
+        for (name, description) in FORMATS {
+            println!("  {name:<8} - {description}");
         }
-        "generic" => schema::print_schema::<GenericInvoice>("generic"),
-        "afip_c" => schema::print_schema::<AfipCInvoice>("afip_c"),
-        "afip_a" => schema::print_schema::<AfipAInvoice>("afip_a"),
-        _ => {
-            eprintln!("Unknown format: {}", format);
-            eprintln!("Run 'invoicy schema list' to see available formats");
-            std::process::exit(1);
-        }
+        return Ok(());
+    }
+
+    let Some(fields) = introspect::format_fields(format) else {
+        eprintln!("Unknown format: {}", format);
+        eprintln!("Run 'invoicy schema list' to see available formats");
+        std::process::exit(1);
+    };
+
+    println!("Format: {}\n", format);
+    let width = fields.iter().map(|f| f.path.len()).max().unwrap_or(0);
+    for field in fields {
+        let optional = if field.optional { " (optional)" } else { "" };
+        println!("  {:<width$}  {}{}", field.path, field.typ, optional);
     }
     Ok(())
 }

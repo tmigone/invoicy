@@ -7,11 +7,12 @@
 
 use std::path::Path;
 
-use afip::{Concepto, DocTipo, FacturaC};
+use afip::{DocTipo, FacturaC};
+use schema::InvoiceConfig;
+use schema::afip_c::Receptor;
 use toml::Value;
 
 use crate::emisor::EmisorProfile;
-use crate::formats::{AfipCInvoice, ConceptoParam, DocTipoParam};
 
 type BoxError = Box<dyn std::error::Error>;
 
@@ -41,20 +42,18 @@ pub fn inject_emisor(value: &mut Value, profile: &EmisorProfile) {
 pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Result<(), BoxError> {
     ensure_placeholders(value);
 
-    // Deserialize a copy to compute the total and read AFIP params / dates.
-    let inv: AfipCInvoice = value.clone().try_into()?;
-    let params = inv.afip.clone().unwrap_or_default();
+    // Deserialize a copy to compute the total and read the receptor / dates.
+    let InvoiceConfig::AfipC(inv) = value.clone().try_into()? else {
+        return Err("se esperaba un comprobante afip_c".into());
+    };
     let total = inv.total();
     if total <= 0.0 {
         return Err("el total (suma de los items) debe ser positivo".into());
     }
+    check_documento(&inv.receptor)?;
 
-    let concepto = concepto_to_afip(params.concepto);
-    let needs_dates = matches!(
-        concepto,
-        Concepto::Servicios | Concepto::ProductosYServicios
-    );
-    let (desde, hasta, vto) = if needs_dates {
+    let concepto = inv.concepto();
+    let (desde, hasta, vto) = if concepto.requires_service_dates() {
         (
             inv.comprobante
                 .periodo_desde
@@ -72,14 +71,14 @@ pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Res
 
     let factura = FacturaC {
         concepto,
-        doc_tipo: doc_tipo_to_afip(params.doc_tipo),
-        doc_nro: params.doc_nro,
+        doc_tipo: inv.receptor.doc_tipo,
+        doc_nro: inv.receptor.doc_nro,
         importe_total: total,
         fecha: None,
         fecha_servicio_desde: desde,
         fecha_servicio_hasta: hasta,
         fecha_vto_pago: vto,
-        condicion_iva_receptor: params.cond_iva_receptor,
+        condicion_iva_receptor: inv.receptor.condicion_iva,
     };
 
     let client = profile.client(home)?;
@@ -115,6 +114,24 @@ pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Res
     Ok(())
 }
 
+/// Catch a document type/number mismatch before it reaches AFIP.
+fn check_documento(receptor: &Receptor) -> Result<(), BoxError> {
+    match (receptor.doc_tipo, receptor.doc_nro) {
+        (DocTipo::ConsumidorFinal, 0) => Ok(()),
+        (DocTipo::ConsumidorFinal, _) => Err(
+            "receptor.doc_nro requiere receptor.doc_tipo (cuit, cuil o dni); \
+             consumidor_final no lleva número"
+                .into(),
+        ),
+        (tipo, 0) => Err(format!(
+            "receptor.doc_nro es obligatorio cuando receptor.doc_tipo es {}",
+            tipo.label()
+        )
+        .into()),
+        _ => Ok(()),
+    }
+}
+
 fn set_str(value: &mut Value, table: &str, key: &str, v: &str) {
     if let Some(t) = value.get_mut(table).and_then(Value::as_table_mut) {
         t.insert(key.to_string(), Value::String(v.to_string()));
@@ -144,23 +161,6 @@ fn ensure_placeholders(value: &mut Value) {
             t.entry(key.to_string())
                 .or_insert_with(|| Value::String(String::new()));
         }
-    }
-}
-
-fn concepto_to_afip(c: ConceptoParam) -> Concepto {
-    match c {
-        ConceptoParam::Productos => Concepto::Productos,
-        ConceptoParam::Servicios => Concepto::Servicios,
-        ConceptoParam::ProductosYServicios => Concepto::ProductosYServicios,
-    }
-}
-
-fn doc_tipo_to_afip(d: DocTipoParam) -> DocTipo {
-    match d {
-        DocTipoParam::ConsumidorFinal => DocTipo::ConsumidorFinal,
-        DocTipoParam::Cuit => DocTipo::Cuit,
-        DocTipoParam::Cuil => DocTipo::Cuil,
-        DocTipoParam::Dni => DocTipo::Dni,
     }
 }
 

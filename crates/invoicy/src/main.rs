@@ -7,11 +7,7 @@ use commands::afip;
 mod afip_invoice;
 mod commands;
 mod emisor;
-mod formats;
 mod overrides;
-mod schema;
-mod typst;
-mod world;
 
 /// Generate PDF invoices from TOML config, and issue Argentine electronic
 /// invoices (Factura C) against ARCA/AFIP.

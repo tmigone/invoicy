@@ -16,9 +16,12 @@ impl VoucherType {
 }
 
 /// "Concepto" — what is being billed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum Concepto {
+    #[default]
     Productos = 1,
     Servicios = 2,
     ProductosYServicios = 3,
@@ -36,18 +39,78 @@ impl Concepto {
 }
 
 /// Receptor document type. `99` / `0` is the anonymous "consumidor final".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum DocTipo {
     Cuit = 80,
     Cuil = 86,
     Dni = 96,
+    #[default]
     ConsumidorFinal = 99,
 }
 
 impl DocTipo {
     pub fn code(self) -> u8 {
         self as u8
+    }
+
+    /// Description as listed by `FEParamGetTiposDoc`.
+    pub fn label(self) -> &'static str {
+        match self {
+            DocTipo::Cuit => "CUIT",
+            DocTipo::Cuil => "CUIL",
+            DocTipo::Dni => "DNI",
+            DocTipo::ConsumidorFinal => "Doc. (Otro)",
+        }
+    }
+}
+
+/// Receptor's condición frente al IVA (`CondicionIVAReceptorId`), mandatory
+/// on every voucher since RG 5616/2024. Codes and descriptions as listed by
+/// `FEParamGetCondicionIvaReceptor`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum CondicionIva {
+    ResponsableInscripto = 1,
+    Exento = 4,
+    #[default]
+    ConsumidorFinal = 5,
+    Monotributo = 6,
+    NoCategorizado = 7,
+    ProveedorDelExterior = 8,
+    ClienteDelExterior = 9,
+    Liberado = 10,
+    MonotributistaSocial = 13,
+    NoAlcanzado = 15,
+    MonotributoTrabajadorIndependientePromovido = 16,
+}
+
+impl CondicionIva {
+    pub fn code(self) -> u8 {
+        self as u8
+    }
+
+    /// Description as printed on the voucher.
+    pub fn label(self) -> &'static str {
+        match self {
+            CondicionIva::ResponsableInscripto => "IVA Responsable Inscripto",
+            CondicionIva::Exento => "IVA Sujeto Exento",
+            CondicionIva::ConsumidorFinal => "Consumidor Final",
+            CondicionIva::Monotributo => "Responsable Monotributo",
+            CondicionIva::NoCategorizado => "Sujeto No Categorizado",
+            CondicionIva::ProveedorDelExterior => "Proveedor del Exterior",
+            CondicionIva::ClienteDelExterior => "Cliente del Exterior",
+            CondicionIva::Liberado => "IVA Liberado – Ley N° 19.640",
+            CondicionIva::MonotributistaSocial => "Monotributista Social",
+            CondicionIva::NoAlcanzado => "IVA No Alcanzado",
+            CondicionIva::MonotributoTrabajadorIndependientePromovido => {
+                "Monotributo Trabajador Independiente Promovido"
+            }
+        }
     }
 }
 
@@ -69,9 +132,8 @@ pub struct FacturaC {
     pub fecha_servicio_hasta: Option<u32>,
     /// Payment due date (YYYYMMDD), required for service concepts.
     pub fecha_vto_pago: Option<u32>,
-    /// Receptor's condición frente al IVA (`CondicionIVAReceptorId`),
-    /// mandatory since RG 5616/2024. `5` = consumidor final.
-    pub condicion_iva_receptor: u8,
+    /// Receptor's condición frente al IVA.
+    pub condicion_iva_receptor: CondicionIva,
 }
 
 impl FacturaC {
@@ -86,7 +148,7 @@ impl FacturaC {
             fecha_servicio_desde: None,
             fecha_servicio_hasta: None,
             fecha_vto_pago: None,
-            condicion_iva_receptor: 5,
+            condicion_iva_receptor: CondicionIva::ConsumidorFinal,
         }
     }
 }
@@ -129,4 +191,19 @@ pub struct CaeResult {
     pub importe_total: f64,
     /// Non-fatal observations returned by ARCA, if any.
     pub observaciones: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn condicion_iva_codes_and_names() {
+        assert_eq!(CondicionIva::default(), CondicionIva::ConsumidorFinal);
+        assert_eq!(CondicionIva::ConsumidorFinal.code(), 5);
+        assert_eq!(CondicionIva::ResponsableInscripto.code(), 1);
+        assert_eq!(CondicionIva::Monotributo.code(), 6);
+        let parsed: CondicionIva = serde_json::from_str("\"responsable_inscripto\"").unwrap();
+        assert_eq!(parsed, CondicionIva::ResponsableInscripto);
+    }
 }

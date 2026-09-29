@@ -102,8 +102,9 @@ inicio_actividades = "01/01/2020"
 [receptor]
 nombre = "Cliente SA"
 domicilio = "Calle Falsa 123"
-documento = "30123456789"
-condicion_iva = "Consumidor Final"
+condicion_iva = "responsable_inscripto"
+doc_tipo = "cuit"
+doc_nro = 30123456789
 condicion_venta = "Cuenta Corriente"
 
 [comprobante]
@@ -130,3 +131,17 @@ subtotal = 50000.00
 numero = "12345678901234"
 vencimiento = "11/02/2025"
 ```
+
+The receptor's `condicion_iva`, `doc_tipo` and `doc_nro` are the codes sent to
+AFIP when authorizing, and the PDF prints their labels ("IVA Responsable
+Inscripto", "CUIT: 30123456789"), so the two always match. Omit all three for
+an anonymous consumidor final. `condicion_iva` takes `responsable_inscripto`,
+`exento`, `consumidor_final`, `monotributo`, `no_categorizado`,
+`proveedor_del_exterior`, `cliente_del_exterior`, `liberado`,
+`monotributista_social`, `no_alcanzado` or
+`monotributo_trabajador_independiente_promovido`; `doc_tipo` takes `cuit`,
+`cuil`, `dni` or `consumidor_final`.
+
+`comprobante.concepto` (`productos`, `servicios` or `productos_y_servicios`) is
+optional: it defaults to `servicios` when a billing period (`periodo_desde` /
+`periodo_hasta`) is set and to `productos` otherwise.

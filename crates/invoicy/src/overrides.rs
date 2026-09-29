@@ -1,7 +1,5 @@
 use toml::Value;
 
-use crate::schema;
-
 /// Apply an override to a config value
 /// The format parameter is used to look up expected types from the schema
 /// when the field doesn't exist in the config
@@ -19,7 +17,7 @@ pub fn apply(config: &mut Value, override_str: &str, format: Option<&str>) -> Re
     let hint = match existing_type {
         ValueType::Unknown => {
             if let Some(fmt) = format {
-                schema_type_to_value_type(schema::get_field_type(fmt, key))
+                schema_type_to_value_type(schema::introspect::field_type(fmt, key))
             } else {
                 ValueType::Unknown
             }

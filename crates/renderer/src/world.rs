@@ -15,13 +15,14 @@ static ARCA_JPEG: &[u8] = include_bytes!("../assets/arca.jpeg");
 
 pub struct InvoiceWorld {
     source: Source,
+    data: Bytes,
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     now: OnceLock<Option<Datetime>>,
 }
 
 impl InvoiceWorld {
-    pub fn new(source_text: &str) -> Self {
+    pub fn new(source_text: &str, data: Vec<u8>) -> Self {
         let source = Source::new(
             FileId::new(None, VirtualPath::new("main.typ")),
             source_text.to_string(),
@@ -31,6 +32,7 @@ impl InvoiceWorld {
 
         Self {
             source,
+            data: Bytes::new(data),
             book: LazyHash::new(book),
             fonts,
             now: OnceLock::new(),
@@ -66,6 +68,7 @@ impl World for InvoiceWorld {
         // Check embedded assets
         match filename.as_ref() {
             "arca.jpeg" => Ok(Bytes::new(ARCA_JPEG.to_vec())),
+            crate::DATA_FILE => Ok(self.data.clone()),
             _ => Err(FileError::NotFound(path.into())),
         }
     }
@@ -155,8 +158,8 @@ fn is_font_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-pub fn compile_to_pdf(source: &str) -> Result<Vec<u8>, String> {
-    let world = InvoiceWorld::new(source);
+pub fn compile_to_pdf(source: &str, data: Vec<u8>) -> Result<Vec<u8>, String> {
+    let world = InvoiceWorld::new(source, data);
 
     let result = typst::compile(&world);
 

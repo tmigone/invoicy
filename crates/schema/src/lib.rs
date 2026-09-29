@@ -1,12 +1,28 @@
-mod afip_a;
-mod afip_c;
-mod generic;
+//! The invoice data model shared across invoicy.
+//!
+//! One serde + `JsonSchema` struct tree per invoice format, as written in the
+//! invoice TOML, plus [`introspect`] to list a format's fields and their types.
+//! It has no rendering, network or file I/O, so anything that needs to read or
+//! validate invoices can depend on it cheaply.
+
+pub mod afip_a;
+pub mod afip_c;
+pub mod generic;
+pub mod introspect;
 
 use serde::Deserialize;
 
 pub use afip_a::AfipAInvoice;
-pub use afip_c::{AfipCInvoice, ConceptoParam, DocTipoParam};
+pub use afip_c::AfipCInvoice;
 pub use generic::GenericInvoice;
+
+/// Every supported format: `(name, description)`. `name` is the value of the
+/// invoice's `format` key.
+pub const FORMATS: &[(&str, &str)] = &[
+    ("generic", "Simple international invoice"),
+    ("afip_c", "Argentina AFIP Factura C (Monotributo)"),
+    ("afip_a", "Argentina AFIP Factura A (Responsable Inscripto)"),
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "format")]
@@ -20,14 +36,6 @@ pub enum InvoiceConfig {
 }
 
 impl InvoiceConfig {
-    pub fn to_typst_dict(&self) -> String {
-        match self {
-            InvoiceConfig::Generic(inv) => inv.to_typst_dict(),
-            InvoiceConfig::AfipC(inv) => inv.to_typst_dict(),
-            InvoiceConfig::AfipA(inv) => inv.to_typst_dict(),
-        }
-    }
-
     pub fn invoice_number(&self) -> String {
         match self {
             InvoiceConfig::Generic(inv) => inv.invoice.number.clone(),
@@ -39,14 +47,6 @@ impl InvoiceConfig {
                 "{}-{}",
                 inv.comprobante.punto_de_venta, inv.comprobante.numero
             ),
-        }
-    }
-
-    pub fn default_template(&self) -> &'static str {
-        match self {
-            InvoiceConfig::Generic(_) => include_str!("../../templates/generic.typ"),
-            InvoiceConfig::AfipC(_) => include_str!("../../templates/afip_c.typ"),
-            InvoiceConfig::AfipA(_) => include_str!("../../templates/afip_a.typ"),
         }
     }
 }
@@ -97,7 +97,7 @@ mod tests {
             ingresos_brutos = "12345"
             inicio_actividades = "01/01/2020"
             [receptor]
-            condicion_iva = "Consumidor Final"
+            condicion_iva = "consumidor_final"
             condicion_venta = "Contado"
             [comprobante]
             tipo = "C"
@@ -122,5 +122,21 @@ mod tests {
         let config: InvoiceConfig = toml::from_str(toml).unwrap();
         assert!(matches!(config, InvoiceConfig::AfipC(_)));
         assert_eq!(config.invoice_number(), "00001-00000001");
+    }
+
+    #[test]
+    fn every_format_is_introspectable() {
+        for (name, _) in FORMATS {
+            let fields = introspect::format_fields(name).unwrap();
+            assert!(!fields.is_empty(), "{name} has no fields");
+        }
+        assert_eq!(
+            introspect::field_type("afip_c", "receptor.doc_tipo").as_deref(),
+            Some("string")
+        );
+        assert_eq!(
+            introspect::field_type("afip_c", "items[3].subtotal").as_deref(),
+            Some("number")
+        );
     }
 }
