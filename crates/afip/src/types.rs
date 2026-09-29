@@ -13,6 +13,13 @@ impl VoucherType {
     pub fn code(self) -> u16 {
         self as u16
     }
+
+    /// The letter printed in the voucher's header box (A, B, C, …).
+    pub fn letra(self) -> &'static str {
+        match self {
+            VoucherType::FacturaC | VoucherType::NotaDebitoC | VoucherType::NotaCreditoC => "C",
+        }
+    }
 }
 
 /// "Concepto" — what is being billed.

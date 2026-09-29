@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use afip::{Client, ClientConfig, Environment};
+use schema::afip_c::Emisor;
 use serde::{Deserialize, Serialize};
 
 type BoxError = Box<dyn std::error::Error>;
@@ -76,24 +77,15 @@ impl EmisorProfile {
         Ok(Client::new(self.client_config(), home.join("cache"))?)
     }
 
-    /// Build the `[emisor]` table for rendering (matches the afip_c `Emisor`).
-    pub fn emisor_table(&self) -> toml::value::Table {
-        let mut t = toml::value::Table::new();
-        t.insert("razon_social".into(), self.razon_social.clone().into());
-        t.insert(
-            "domicilio_comercial".into(),
-            self.domicilio_comercial.clone().into(),
-        );
-        t.insert("condicion_iva".into(), self.condicion_iva.clone().into());
-        t.insert("cuit".into(), self.cuit.to_string().into());
-        t.insert(
-            "ingresos_brutos".into(),
-            self.ingresos_brutos.clone().into(),
-        );
-        t.insert(
-            "inicio_actividades".into(),
-            self.inicio_actividades.clone().into(),
-        );
-        t
+    /// The issuer as it appears on (and is recorded with) the invoice.
+    pub fn emisor(&self) -> Emisor {
+        Emisor {
+            razon_social: self.razon_social.clone(),
+            domicilio_comercial: self.domicilio_comercial.clone(),
+            condicion_iva: self.condicion_iva.clone(),
+            cuit: self.cuit.to_string(),
+            ingresos_brutos: self.ingresos_brutos.clone(),
+            inicio_actividades: self.inicio_actividades.clone(),
+        }
     }
 }

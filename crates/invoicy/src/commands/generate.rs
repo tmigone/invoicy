@@ -7,11 +7,13 @@ use crate::afip_invoice;
 use crate::emisor::EmisorProfile;
 use crate::overrides;
 
+/// Generate an invoice into `output_dir`: `<name>.toml` with every field of
+/// the invoice (including the ones filled in automatically) and `<name>.pdf`.
 pub fn generate(
     home: &Path,
     config_path: PathBuf,
     template: Option<PathBuf>,
-    output: Option<PathBuf>,
+    output_dir: PathBuf,
     override_args: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read and parse config as TOML Value first
@@ -29,63 +31,46 @@ pub fn generate(
         overrides::apply(&mut config_value, override_str, format.as_deref())?;
     }
 
-    // afip_c invoices pull the emisor from the shared profile and, when they
-    // have no CAE yet, get authorized against AFIP first (assigning número +
-    // fecha + CAE). A TOML that already carries [emisor] and/or a CAE keeps
-    // them, so re-running never duplicates a comprobante.
-    if format.as_deref() == Some("afip_c") {
-        let need_emisor = !afip_invoice::has_emisor(&config_value);
-        let need_auth = !afip_invoice::has_cae(&config_value);
-        if need_emisor || need_auth {
-            let profile = EmisorProfile::load(home)?;
-            if need_emisor {
-                afip_invoice::inject_emisor(&mut config_value, &profile);
-            }
-            if need_auth {
-                afip_invoice::authorize(&profile, home, &mut config_value)?;
-            }
-        }
+    let mut config: InvoiceConfig = config_value.try_into()?;
+
+    // Everything that can fail locally happens before AFIP issues anything.
+    let template_content = template.map(std::fs::read_to_string).transpose()?;
+    std::fs::create_dir_all(&output_dir)?;
+
+    // afip_c invoices are drafts: authorizing fills in the emisor, número,
+    // fecha and CAE. Each run issues a new comprobante.
+    if let InvoiceConfig::AfipC(inv) = &mut config {
+        let profile = EmisorProfile::load(home)?;
+        afip_invoice::authorize(&profile, home, inv)?;
     }
 
-    // Deserialize to InvoiceConfig
-    let config: InvoiceConfig = config_value.try_into()?;
+    let stem = unique_stem(&output_dir, &format!("invoice-{}", config.invoice_number()));
 
-    // Custom template from file, or the format's built-in one
-    let template_content = template.map(std::fs::read_to_string).transpose()?;
+    // The TOML is the invoice's record: write it before rendering so a
+    // failed render never loses an issued CAE.
+    let toml_path = output_dir.join(format!("{stem}.toml"));
+    std::fs::write(&toml_path, toml::to_string_pretty(&config)?)?;
+    println!("Generated: {}", toml_path.display());
 
-    // Determine output path (auto-increment if exists)
-    let base_path =
-        output.unwrap_or_else(|| PathBuf::from(format!("invoice-{}.pdf", config.invoice_number())));
-    let output_path = unique_path(base_path);
-
-    // Render to PDF
     let pdf_bytes = renderer::render(&config, template_content.as_deref())?;
-
-    // Write output
-    std::fs::write(&output_path, pdf_bytes)?;
-    println!("Generated: {}", output_path.display());
+    let pdf_path = output_dir.join(format!("{stem}.pdf"));
+    std::fs::write(&pdf_path, pdf_bytes)?;
+    println!("Generated: {}", pdf_path.display());
 
     Ok(())
 }
 
-fn unique_path(path: PathBuf) -> PathBuf {
-    if !path.exists() {
-        return path;
+/// `name`, or `name_2`, `name_3`, … — the first for which neither the `.toml`
+/// nor the `.pdf` exists in `dir`.
+fn unique_stem(dir: &Path, name: &str) -> String {
+    let taken = |stem: &str| {
+        dir.join(format!("{stem}.toml")).exists() || dir.join(format!("{stem}.pdf")).exists()
+    };
+    if !taken(name) {
+        return name.to_string();
     }
-
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("invoice");
-    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("pdf");
-    let parent = path.parent().unwrap_or(std::path::Path::new("."));
-
-    let mut n = 2;
-    loop {
-        let new_path = parent.join(format!("{}_{}.{}", stem, n, ext));
-        if !new_path.exists() {
-            return new_path;
-        }
-        n += 1;
-    }
+    (2..)
+        .map(|n| format!("{name}_{n}"))
+        .find(|stem| !taken(stem))
+        .expect("an unused name exists")
 }

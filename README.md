@@ -8,7 +8,6 @@ A CLI tool for generating PDF invoices from TOML configuration files using Typst
 - Multiple invoice formats:
   - `generic` - Simple international invoice
   - `afip_c` - Argentina AFIP Factura C (Monotributo)
-  - `afip_a` - Argentina AFIP Factura A (Responsable Inscripto)
 - Override config values via CLI (`--set key=value`)
 - Customizable templates via Typst
 - Single self-contained binary
@@ -31,16 +30,17 @@ cargo build --release
 
 ```bash
 # Generate invoice using built-in template
+# (writes output/invoice-<number>.pdf and output/invoice-<number>.toml)
 invoicy generate -c invoice.toml
 
-# Generate with custom output path
-invoicy generate -c invoice.toml -o my-invoice.pdf
+# Write into another directory
+invoicy generate -c invoice.toml -o invoices/2026-09
 
 # Use a custom template
 invoicy generate -c invoice.toml -t my-template.typ
 
 # Override config values (useful for automation)
-invoicy generate -c base.toml --set comprobante.numero=00000153
+invoicy generate -c base.toml --set comprobante.periodo_desde=01/10/2026
 
 # List available formats
 invoicy schema list
@@ -54,6 +54,12 @@ invoicy schema afip_c
 ## Configuration
 
 Create a TOML file with your invoice data. The `format` field determines which template to use.
+
+`generate` writes two files into the output directory (`./output` by default,
+`--output` to change it): the PDF, and a TOML with every field of the invoice,
+including the ones filled in automatically. That TOML is the invoice's record;
+`invoicy schema <format>` lists all fields and tags the automatic ones with
+where they come from.
 
 ### Generic Invoice
 
@@ -88,16 +94,12 @@ rate = 5000.00
 
 ### AFIP Factura C (Argentina)
 
+You write the receptor, the comprobante's concepto and dates, and the items;
+invoicy fills in the rest when AFIP authorizes the invoice. Every `generate`
+issues a new comprobante.
+
 ```toml
 format = "afip_c"
-
-[emisor]
-razon_social = "Juan Pérez"
-domicilio_comercial = "Av. Corrientes 1234 - CABA"
-condicion_iva = "Responsable Monotributo"
-cuit = "20123456789"
-ingresos_brutos = "12345"
-inicio_actividades = "01/01/2020"
 
 [receptor]
 nombre = "Cliente SA"
@@ -108,11 +110,7 @@ doc_nro = 30123456789
 condicion_venta = "Cuenta Corriente"
 
 [comprobante]
-tipo = "C"
-codigo = "011"
-punto_de_venta = "00001"
-numero = "00000001"
-fecha_emision = "01/02/2025"
+concepto = "servicios"
 periodo_desde = "01/01/2025"
 periodo_hasta = "31/01/2025"
 fecha_vencimiento = "15/02/2025"
@@ -123,14 +121,20 @@ descripcion = "Servicios profesionales"
 cantidad = 1.0
 unidad = "unidades"
 precio_unitario = 50000.00
-bonificacion_porcentaje = 0.0
-bonificacion_importe = 0.0
-subtotal = 50000.00
-
-[cae]
-numero = "12345678901234"
-vencimiento = "11/02/2025"
 ```
+
+Filled in automatically (writing any of them is an error):
+
+| Field | From |
+|---|---|
+| `[emisor]`, `comprobante.punto_de_venta` | AFIP: your profile, `emisor.toml` (`invoicy afip configure`) |
+| `comprobante.numero`, `comprobante.fecha_emision`, `[cae]` | AFIP, when it authorizes the invoice |
+| `comprobante.tipo` / `codigo` (`C` / `011`), `items[].subtotal`, `[totales]`, `qr` | computed |
+
+The PDF footer carries the QR code ARCA requires on electronic invoices
+(RG 4892/2020): it encodes ARCA's verification URL for the voucher
+(`https://www.arca.gob.ar/fe/qr/?p=…`), which is also recorded as `qr` in the
+output TOML.
 
 The receptor's `condicion_iva`, `doc_tipo` and `doc_nro` are the codes sent to
 AFIP when authorizing, and the PDF prints their labels ("IVA Responsable
@@ -142,6 +146,11 @@ an anonymous consumidor final. `condicion_iva` takes `responsable_inscripto`,
 `monotributo_trabajador_independiente_promovido`; `doc_tipo` takes `cuit`,
 `cuil`, `dni` or `consumidor_final`.
 
-`comprobante.concepto` (`productos`, `servicios` or `productos_y_servicios`) is
-optional: it defaults to `servicios` when a billing period (`periodo_desde` /
-`periodo_hasta`) is set and to `productos` otherwise.
+`comprobante.concepto` is required: `productos`, `servicios` or
+`productos_y_servicios`. For `servicios` (and mixed), `periodo_desde`,
+`periodo_hasta` and `fecha_vencimiento` are sent to AFIP as the billing period
+and payment due date.
+
+Each item's subtotal is `cantidad × precio_unitario`, rounded to cents, and
+the total sent to AFIP is their sum. Discounts (bonificaciones) are not
+supported; the PDF prints them as 0.

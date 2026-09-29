@@ -25,11 +25,12 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Generate an invoice PDF from a TOML config file.
+    /// Generate an invoice from a TOML config file.
     ///
-    /// For `afip_c` invoices without a CAE, this authorizes against AFIP
-    /// (WSFE → CAE) before rendering; if a CAE is already present it just
-    /// re-renders, so it never issues a duplicate comprobante.
+    /// Writes `<output>/invoice-<number>.pdf` and `.toml`; the TOML holds every
+    /// field of the invoice, including the ones filled in automatically. An
+    /// `afip_c` invoice is authorized against AFIP (WSFE → CAE) first, so each
+    /// run issues a new comprobante.
     #[command(alias = "gen")]
     Generate {
         /// Path to the invoice config file (TOML)
@@ -40,18 +41,18 @@ enum Commands {
         #[arg(short, long)]
         template: Option<PathBuf>,
 
-        /// Output PDF path (defaults to invoice-{number}.pdf)
-        #[arg(short, long)]
-        output: Option<PathBuf>,
+        /// Directory for the generated PDF and TOML
+        #[arg(short, long, default_value = "output")]
+        output: PathBuf,
 
-        /// Override config values (e.g., --set comprobante.numero=00000153)
+        /// Override config values (e.g., --set comprobante.periodo_desde=01/10/2026)
         #[arg(short = 's', long = "set", value_name = "KEY=VALUE")]
         overrides: Vec<String>,
     },
 
     /// Show the schema for an invoice format.
     Schema {
-        /// Format name (generic, afip_c, afip_a) or "list" to show all
+        /// Format name (generic, afip_c) or "list" to show all
         format: String,
     },
 

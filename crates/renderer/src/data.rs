@@ -1,13 +1,14 @@
-//! The JSON document templates receive as `invoice-data`: the invoice as
-//! parsed (same field names as the TOML), plus the totals the templates print.
-//! Totals are computed here so no arithmetic lives in Typst, and AFIP codes
-//! (e.g. `receptor.condicion_iva`) are replaced by their printed labels.
+//! The JSON document templates receive as `invoice-data`: the invoice with the
+//! same field names as the TOML, with AFIP codes (e.g.
+//! `receptor.condicion_iva`) replaced by their printed labels. An `afip_c`
+//! invoice must be complete (see `AfipCInvoice::compute`): its subtotals and
+//! totals are printed as stored, so no arithmetic lives in Typst.
 
 use afip::DocTipo;
 use serde::Serialize;
 
 use schema::afip_c::{self, Receptor};
-use schema::{AfipAInvoice, GenericInvoice, InvoiceConfig};
+use schema::{GenericInvoice, InvoiceConfig};
 
 #[derive(Serialize)]
 struct GenericData<'a> {
@@ -21,11 +22,33 @@ struct AfipCData<'a> {
     emisor: &'a afip_c::Emisor,
     receptor: AfipCReceptor<'a>,
     comprobante: &'a afip_c::Comprobante,
-    items: &'a [afip_c::LineItem],
+    items: Vec<AfipCItem<'a>>,
     cae: &'a afip_c::Cae,
+    /// QR text; the template shows `qr.svg` when this isn't empty.
+    qr: &'a str,
     subtotal: f64,
     otros_tributos: f64,
     total: f64,
+}
+
+/// A line of the invoice. The layout keeps AFIP's bonificación columns;
+/// invoicy doesn't support discounts, so they are always zero.
+#[derive(Serialize)]
+struct AfipCItem<'a> {
+    #[serde(flatten)]
+    item: &'a afip_c::LineItem,
+    bonificacion_porcentaje: f64,
+    bonificacion_importe: f64,
+}
+
+impl<'a> From<&'a afip_c::LineItem> for AfipCItem<'a> {
+    fn from(item: &'a afip_c::LineItem) -> Self {
+        Self {
+            item,
+            bonificacion_porcentaje: 0.0,
+            bonificacion_importe: 0.0,
+        }
+    }
 }
 
 /// The receptor with its AFIP codes turned into the text printed on the PDF.
@@ -59,27 +82,6 @@ impl<'a> From<&'a Receptor> for AfipCReceptor<'a> {
     }
 }
 
-#[derive(Serialize)]
-struct AfipAData<'a> {
-    #[serde(flatten)]
-    invoice: &'a AfipAInvoice,
-    totales: AfipATotales,
-}
-
-/// Per-rate IVA totals. Only 21% is broken out; every other rate prints 0.
-#[derive(Serialize)]
-struct AfipATotales {
-    neto_gravado: f64,
-    iva_27: f64,
-    iva_21: f64,
-    iva_10_5: f64,
-    iva_5: f64,
-    iva_2_5: f64,
-    iva_0: f64,
-    otros_tributos: f64,
-    total: f64,
-}
-
 /// Serialize `config` into the JSON document the template reads.
 pub(crate) fn to_json(config: &InvoiceConfig) -> Result<Vec<u8>, String> {
     let json = match config {
@@ -91,25 +93,12 @@ pub(crate) fn to_json(config: &InvoiceConfig) -> Result<Vec<u8>, String> {
             emisor: &inv.emisor,
             receptor: (&inv.receptor).into(),
             comprobante: &inv.comprobante,
-            items: &inv.items,
+            items: inv.items.iter().map(Into::into).collect(),
             cae: &inv.cae,
-            subtotal: inv.subtotal(),
-            otros_tributos: inv.otros_tributos(),
-            total: inv.total(),
-        }),
-        InvoiceConfig::AfipA(inv) => serde_json::to_vec(&AfipAData {
-            invoice: inv,
-            totales: AfipATotales {
-                neto_gravado: inv.neto_gravado(),
-                iva_27: 0.0,
-                iva_21: inv.total_iva(),
-                iva_10_5: 0.0,
-                iva_5: 0.0,
-                iva_2_5: 0.0,
-                iva_0: 0.0,
-                otros_tributos: inv.otros_tributos_total(),
-                total: inv.total(),
-            },
+            qr: &inv.qr,
+            subtotal: inv.totales.subtotal,
+            otros_tributos: inv.totales.otros_tributos,
+            total: inv.totales.total,
         }),
     };
     json.map_err(|e| format!("cannot serialize invoice data: {e}"))

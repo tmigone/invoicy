@@ -13,10 +13,14 @@
 //!   [`wsaa`], [`wsfe`] — and the HTTP/OpenSSL stack behind it. Without it the
 //!   crate is just the data types ([`types`], [`config`]), cheap to depend on.
 //! - `schemars`: derive `JsonSchema` for the request enums.
+//!
+//! [`qr`] builds the QR code ARCA requires on printed invoices; it needs no
+//! network, so it's available either way.
 
 mod error;
 
 pub mod config;
+pub mod qr;
 pub mod types;
 
 #[cfg(feature = "client")]

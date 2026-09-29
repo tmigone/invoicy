@@ -2005,6 +2005,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edecfcd5d755a5e5d98e24cf43113e7cdaec5a070edd0f6b250c03a573da30fa"
 
 [[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2260,6 +2266,7 @@ dependencies = [
  "afip",
  "chrono",
  "dirs",
+ "qrcode",
  "schema",
  "serde",
  "serde_json",
@@ -2513,6 +2520,7 @@ name = "schema"
 version = "0.1.0"
 dependencies = [
  "afip",
+ "base64",
  "schemars",
  "serde",
  "serde_json",

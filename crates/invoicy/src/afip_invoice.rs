@@ -1,58 +1,67 @@
 //! AFIP authorization step for `afip_c` invoices.
 //!
-//! Given a parsed `afip_c` TOML value, this computes the total from `items`,
-//! requests a CAE from WSFE, and writes `numero` / `fecha_emision` /
-//! `punto_de_venta` / `[cae]` back into the value so the normal render path can
-//! produce the PDF.
+//! Completes a draft [`AfipCInvoice`] (only user-written fields) into the full
+//! invoice: the emisor and punto de venta come from the profile, the computed
+//! fields are filled in, and the número, fecha and CAE are the ones WSFE
+//! assigns when it authorizes the invoice.
 
 use std::path::Path;
 
 use afip::{DocTipo, FacturaC};
-use schema::InvoiceConfig;
-use schema::afip_c::Receptor;
-use toml::Value;
+use schema::AfipCInvoice;
+use schema::afip_c::{Cae, Receptor};
 
 use crate::emisor::EmisorProfile;
 
 type BoxError = Box<dyn std::error::Error>;
 
-/// Whether the TOML already carries a non-empty CAE (already authorized).
-pub fn has_cae(value: &Value) -> bool {
-    value
-        .get("cae")
-        .and_then(|c| c.get("numero"))
-        .and_then(|n| n.as_str())
-        .map(|s| !s.trim().is_empty())
-        .unwrap_or(false)
-}
+/// Authorize `inv` against WSFE, filling in every automatic field.
+pub fn authorize(
+    profile: &EmisorProfile,
+    home: &Path,
+    inv: &mut AfipCInvoice,
+) -> Result<(), BoxError> {
+    let factura = prepare(profile, inv)?;
 
-/// Whether the TOML carries its own `[emisor]` block (an override).
-pub fn has_emisor(value: &Value) -> bool {
-    value.get("emisor").is_some()
-}
+    let client = profile.client(home)?;
+    println!("Solicitando CAE a WSFE (total ${:.2})…", inv.totales.total);
+    let res = client.create_factura_c(&factura)?;
 
-/// Inject the emisor profile as the `[emisor]` table (invoice omitted it).
-pub fn inject_emisor(value: &mut Value, profile: &EmisorProfile) {
-    if let Some(root) = value.as_table_mut() {
-        root.insert("emisor".to_string(), Value::Table(profile.emisor_table()));
-    }
-}
-
-/// Authorize the invoice against WSFE and fold the result into `value`.
-pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Result<(), BoxError> {
-    ensure_placeholders(value);
-
-    // Deserialize a copy to compute the total and read the receptor / dates.
-    let InvoiceConfig::AfipC(inv) = value.clone().try_into()? else {
-        return Err("se esperaba un comprobante afip_c".into());
+    inv.comprobante.punto_de_venta = format!("{:05}", res.punto_venta);
+    inv.comprobante.numero = format!("{:08}", res.numero);
+    inv.comprobante.fecha_emision = yyyymmdd_to_ddmmyyyy(res.fecha);
+    inv.cae = Cae {
+        numero: res.cae,
+        vencimiento: yyyymmdd_str_to_ddmmyyyy(&res.cae_vencimiento),
     };
-    let total = inv.total();
+    // Now that AFIP assigned número, fecha and CAE, the QR can be built.
+    inv.compute();
+    if inv.qr.is_empty() {
+        // Don't fail: the CAE is issued and the invoice must still be written.
+        eprintln!("⚠ no se pudo generar el código QR con los datos devueltos por AFIP");
+    }
+
+    println!(
+        "✔ CAE {} (vto {}) — comprobante {}-{}",
+        inv.cae.numero, inv.cae.vencimiento, inv.comprobante.punto_de_venta, inv.comprobante.numero
+    );
+    Ok(())
+}
+
+/// Fill in what's known before calling AFIP (emisor, punto de venta, computed
+/// fields), validate, and build the WSFE request.
+fn prepare(profile: &EmisorProfile, inv: &mut AfipCInvoice) -> Result<FacturaC, BoxError> {
+    inv.emisor = profile.emisor();
+    inv.comprobante.punto_de_venta = format!("{:05}", profile.punto_venta);
+    inv.compute();
+
+    let total = inv.totales.total;
     if total <= 0.0 {
         return Err("el total (suma de los items) debe ser positivo".into());
     }
     check_documento(&inv.receptor)?;
 
-    let concepto = inv.concepto();
+    let concepto = inv.comprobante.concepto;
     let (desde, hasta, vto) = if concepto.requires_service_dates() {
         (
             inv.comprobante
@@ -69,7 +78,7 @@ pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Res
         (None, None, None)
     };
 
-    let factura = FacturaC {
+    Ok(FacturaC {
         concepto,
         doc_tipo: inv.receptor.doc_tipo,
         doc_nro: inv.receptor.doc_nro,
@@ -79,39 +88,7 @@ pub fn authorize(profile: &EmisorProfile, home: &Path, value: &mut Value) -> Res
         fecha_servicio_hasta: hasta,
         fecha_vto_pago: vto,
         condicion_iva_receptor: inv.receptor.condicion_iva,
-    };
-
-    let client = profile.client(home)?;
-    println!("Solicitando CAE a WSFE (total ${total:.2})…");
-    let res = client.create_factura_c(&factura)?;
-
-    let vto_cae = yyyymmdd_str_to_ddmmyyyy(&res.cae_vencimiento);
-    set_str(
-        value,
-        "comprobante",
-        "punto_de_venta",
-        &format!("{:05}", res.punto_venta),
-    );
-    set_str(
-        value,
-        "comprobante",
-        "numero",
-        &format!("{:08}", res.numero),
-    );
-    set_str(
-        value,
-        "comprobante",
-        "fecha_emision",
-        &yyyymmdd_to_ddmmyyyy(res.fecha),
-    );
-    set_str(value, "cae", "numero", &res.cae);
-    set_str(value, "cae", "vencimiento", &vto_cae);
-
-    println!(
-        "✔ CAE {} (vto {}) — comprobante {:05}-{:08}",
-        res.cae, vto_cae, res.punto_venta, res.numero
-    );
-    Ok(())
+    })
 }
 
 /// Catch a document type/number mismatch before it reaches AFIP.
@@ -129,38 +106,6 @@ fn check_documento(receptor: &Receptor) -> Result<(), BoxError> {
         )
         .into()),
         _ => Ok(()),
-    }
-}
-
-fn set_str(value: &mut Value, table: &str, key: &str, v: &str) {
-    if let Some(t) = value.get_mut(table).and_then(Value::as_table_mut) {
-        t.insert(key.to_string(), Value::String(v.to_string()));
-    }
-}
-
-/// Ensure `comprobante.{numero,fecha_emision,fecha_vencimiento}` and `[cae]`
-/// exist so the struct deserializes; they get overwritten after authorization.
-fn ensure_placeholders(value: &mut Value) {
-    let Some(root) = value.as_table_mut() else {
-        return;
-    };
-    let comp = root
-        .entry("comprobante".to_string())
-        .or_insert_with(|| Value::Table(Default::default()));
-    if let Some(t) = comp.as_table_mut() {
-        for key in ["numero", "fecha_emision", "fecha_vencimiento"] {
-            t.entry(key.to_string())
-                .or_insert_with(|| Value::String(String::new()));
-        }
-    }
-    let cae = root
-        .entry("cae".to_string())
-        .or_insert_with(|| Value::Table(Default::default()));
-    if let Some(t) = cae.as_table_mut() {
-        for key in ["numero", "vencimiento"] {
-            t.entry(key.to_string())
-                .or_insert_with(|| Value::String(String::new()));
-        }
     }
 }
 
@@ -184,4 +129,74 @@ fn yyyymmdd_str_to_ddmmyyyy(s: &str) -> String {
     s.parse::<u32>()
         .map(yyyymmdd_to_ddmmyyyy)
         .unwrap_or_else(|_| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use schema::InvoiceConfig;
+
+    fn profile(punto_venta: u32) -> EmisorProfile {
+        EmisorProfile {
+            cuit: 20111111112,
+            razon_social: "Test".into(),
+            domicilio_comercial: String::new(),
+            condicion_iva: "Responsable Monotributo".into(),
+            ingresos_brutos: String::new(),
+            inicio_actividades: String::new(),
+            punto_venta,
+            environment: afip::Environment::Homologacion,
+            cert_path: "cert.crt".into(),
+            key_path: "key.key".into(),
+        }
+    }
+
+    fn draft(receptor: &str) -> AfipCInvoice {
+        let src = format!(
+            r#"
+            format = "afip_c"
+            [receptor]
+            condicion_venta = "Contado"
+            {receptor}
+            [comprobante]
+            concepto = "servicios"
+            periodo_desde = "01/09/2026"
+            periodo_hasta = "30/09/2026"
+            fecha_vencimiento = "10/10/2026"
+            [[items]]
+            codigo = "1"
+            descripcion = "x"
+            cantidad = 2.0
+            unidad = "u"
+            precio_unitario = 1500.5
+            "#
+        );
+        match toml::from_str(&src).unwrap() {
+            InvoiceConfig::AfipC(inv) => inv,
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn prepare_fills_profile_and_computed_fields() {
+        let mut inv = draft("");
+        let factura = prepare(&profile(3), &mut inv).unwrap();
+
+        assert_eq!(inv.emisor.cuit, "20111111112");
+        assert_eq!(inv.comprobante.punto_de_venta, "00003");
+        assert_eq!(inv.comprobante.tipo, "C");
+        assert_eq!(inv.totales.total, 3001.0);
+
+        assert_eq!(factura.importe_total, 3001.0);
+        assert_eq!(factura.fecha_servicio_desde, Some(20260901));
+        assert_eq!(factura.fecha_servicio_hasta, Some(20260930));
+        assert_eq!(factura.fecha_vto_pago, Some(20261010));
+    }
+
+    #[test]
+    fn prepare_rejects_document_mismatch() {
+        assert!(prepare(&profile(3), &mut draft("doc_tipo = \"cuit\"")).is_err());
+        assert!(prepare(&profile(3), &mut draft("doc_nro = 123")).is_err());
+        assert!(prepare(&profile(3), &mut draft("doc_tipo = \"dni\"\ndoc_nro = 123")).is_ok());
+    }
 }

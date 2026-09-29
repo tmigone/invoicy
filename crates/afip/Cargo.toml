@@ -11,7 +11,6 @@ client = [
     "dep:reqwest",
     "dep:roxmltree",
     "dep:openssl",
-    "dep:base64",
     "dep:chrono",
     "dep:serde_json",
 ]
@@ -21,6 +20,8 @@ schemars = ["dep:schemars"]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 schemars = { version = "1.2.1", optional = true }
+# QR payload encoding (also used by the WSAA login ticket).
+base64 = "0.22"
 
 # Everything below is only needed to talk to ARCA (`client` feature).
 serde_json = { version = "1", optional = true }
@@ -34,7 +35,6 @@ roxmltree = { version = "0.21", optional = true }
 # `vendored` builds OpenSSL from source so we don't depend on the host's
 # (Libre)SSL headers — important on macOS.
 openssl = { version = "0.10", features = ["vendored"], optional = true }
-base64 = { version = "0.22", optional = true }
 
 [dev-dependencies]
 serde_json = "1"
