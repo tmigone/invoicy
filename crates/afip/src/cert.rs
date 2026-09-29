@@ -51,3 +51,29 @@ pub fn generate_key_and_csr(cuit: u64, razon_social: &str, alias: &str) -> Resul
         csr_pem: String::from_utf8(req.to_pem()?).expect("PEM is valid UTF-8"),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openssl::nid::Nid;
+    use openssl::x509::X509Req;
+
+    #[test]
+    fn csr_subject_carries_alias_cuit_and_razon_social() {
+        let out = generate_key_and_csr(20111111112, "Mi Nombre", "renovado").unwrap();
+        let req = X509Req::from_pem(out.csr_pem.as_bytes()).unwrap();
+        let entry = |nid| {
+            req.subject_name()
+                .entries_by_nid(nid)
+                .next()
+                .unwrap()
+                .data()
+                .to_string()
+                .unwrap()
+        };
+        assert_eq!(entry(Nid::COMMONNAME), "renovado");
+        assert_eq!(entry(Nid::ORGANIZATIONNAME), "Mi Nombre");
+        assert_eq!(entry(Nid::SERIALNUMBER), "CUIT 20111111112");
+        assert!(req.verify(&req.public_key().unwrap()).unwrap());
+    }
+}

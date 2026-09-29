@@ -91,7 +91,8 @@ enum AfipCommand {
     },
     /// Generate the private key + CSR to upload to the ARCA portal.
     GenerateCertificate {
-        /// Certificate alias / common name.
+        /// Name of the certificate (the CSR's CN), shown in the ARCA portal.
+        /// The key and CSR are always written to the profile's paths.
         #[arg(long, default_value = "invoicy")]
         alias: String,
         /// Overwrite an existing key/CSR.

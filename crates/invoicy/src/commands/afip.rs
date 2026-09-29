@@ -74,13 +74,17 @@ pub fn configure(
     Ok(())
 }
 
+/// Generate the key + CSR at the profile's key path (the CSR next to it), so
+/// the certificate ARCA issues pairs with the key invoicy logs in with.
+/// `alias` only names the certificate: it becomes the CSR's CN.
 pub fn generate_certificate(home: &Path, alias: &str, force: bool) -> R {
     let profile = EmisorProfile::load(home)?;
 
-    let certs_dir = home.join("certs");
-    std::fs::create_dir_all(&certs_dir)?;
-    let key_path = certs_dir.join(format!("{alias}.key"));
-    let csr_path = certs_dir.join(format!("{alias}.csr"));
+    let key_path = profile.key_path.clone();
+    let csr_path = key_path.with_extension("csr");
+    if let Some(dir) = key_path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
 
     if key_path.exists() && !force {
         return Err(format!(
@@ -168,4 +172,48 @@ pub fn list_vouchers(home: &Path, last: u64, from: Option<u64>, to: Option<u64>)
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A fresh home with a profile, under the system temp dir.
+    fn home(name: &str) -> PathBuf {
+        let home = std::env::temp_dir().join(format!("invoicy-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        configure(
+            &home,
+            20111111112,
+            "Test".into(),
+            1,
+            "Responsable Monotributo".into(),
+            String::new(),
+            String::new(),
+            String::new(),
+            false,
+        )
+        .unwrap();
+        home
+    }
+
+    #[test]
+    fn certificate_files_follow_the_profile_whatever_the_alias() {
+        let home = home("alias");
+        generate_certificate(&home, "renovado", false).unwrap();
+
+        let profile = EmisorProfile::load(&home).unwrap();
+        assert!(profile.key_path.exists());
+        assert!(profile.key_path.with_extension("csr").exists());
+        assert!(!home.join("certs/renovado.key").exists());
+
+        // A second key must be asked for explicitly: it invalidates the
+        // certificate ARCA issued for the first one.
+        assert!(generate_certificate(&home, "otro", false).is_err());
+        let before = std::fs::read(&profile.key_path).unwrap();
+        generate_certificate(&home, "otro", true).unwrap();
+        assert_ne!(std::fs::read(&profile.key_path).unwrap(), before);
+
+        std::fs::remove_dir_all(&home).unwrap();
+    }
 }
