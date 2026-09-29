@@ -35,7 +35,7 @@ cargo build --release
 
 ```bash
 # Generate invoice using built-in template
-# (writes output/invoice-<number>.pdf and output/invoice-<number>.toml)
+# (writes output/<home>/invoice-<number>.pdf and .toml; see below)
 invoicy generate -c invoice.toml
 
 # Write into another directory
@@ -55,13 +55,15 @@ invoicy schema generic
 invoicy schema afip_c
 ```
 
-`examples/` has ready-to-edit invoices: `generic.toml`, and for `afip_c` `afip/consumidor_final.toml` and `afip/responsable_inscripto.toml`.
+`examples/` has ready-to-edit invoices: `generic.toml`, and for `afip_c` `consumidor_final.toml` and `responsable_inscripto.toml`.
 
 ## Configuration
 
 Create a TOML file with your invoice data. The `format` field determines which template to use.
 
-`generate` writes two files into the output directory (`./output` by default, `--output` to change it): the PDF, and a TOML with every field of the invoice, including the ones filled in automatically. That TOML is the invoice's record; `invoicy schema <format>` lists all fields and tags the automatic ones with where they come from.
+`generate` writes two files into the output directory: the PDF, and a TOML with every field of the invoice, including the ones filled in automatically. That TOML is the invoice's record; `invoicy schema <format>` lists all fields and tags the automatic ones with where they come from.
+
+The output directory defaults to `output/<name of the home directory>` under the current directory, so each issuer's invoices land in their own folder: with the default home `~/invoicy` that's `output/invoicy`, with `--home ~/invoicy/ana` it's `output/ana`. `--output <dir>` overrides it.
 
 ### Generic Invoice
 

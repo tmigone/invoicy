@@ -7,15 +7,18 @@ use crate::afip_invoice;
 use crate::emisor::EmisorProfile;
 use crate::overrides;
 
-/// Generate an invoice into `output_dir`: `<name>.toml` with every field of
-/// the invoice (including the ones filled in automatically) and `<name>.pdf`.
+/// Generate an invoice into `output_dir` (by default [`default_output_dir`]):
+/// `<name>.toml` with every field of the invoice (including the ones filled in
+/// automatically) and `<name>.pdf`.
 pub fn generate(
     home: &Path,
     config_path: PathBuf,
     template: Option<PathBuf>,
-    output_dir: PathBuf,
+    output_dir: Option<PathBuf>,
     override_args: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let output_dir = output_dir.unwrap_or_else(|| default_output_dir(home));
+
     // Read and parse config as TOML Value first
     let config_content = std::fs::read_to_string(&config_path)?;
     let mut config_value: Value = toml::from_str(&config_content)?;
@@ -60,6 +63,16 @@ pub fn generate(
     Ok(())
 }
 
+/// `output/<home name>`, so each issuer's invoices (one home each) land in
+/// their own folder: `--home ~/invoicy/ana` writes to `output/ana`.
+fn default_output_dir(home: &Path) -> PathBuf {
+    let output = PathBuf::from("output");
+    match home.file_name() {
+        Some(name) => output.join(name),
+        None => output,
+    }
+}
+
 /// `name`, or `name_2`, `name_3`, … — the first for which neither the `.toml`
 /// nor the `.pdf` exists in `dir`.
 fn unique_stem(dir: &Path, name: &str) -> String {
@@ -73,4 +86,18 @@ fn unique_stem(dir: &Path, name: &str) -> String {
         .map(|n| format!("{name}_{n}"))
         .find(|stem| !taken(stem))
         .expect("an unused name exists")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_output_dir_follows_the_home_name() {
+        let out = |home: &str| default_output_dir(Path::new(home));
+        assert_eq!(out("/Users/x/invoicy/ana"), Path::new("output/ana"));
+        assert_eq!(out("home/homologacion"), Path::new("output/homologacion"));
+        assert_eq!(out("home/produccion/"), Path::new("output/produccion"));
+        assert_eq!(out("/"), Path::new("output"));
+    }
 }

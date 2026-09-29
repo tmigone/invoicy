@@ -18,6 +18,22 @@ invoicy --home ~/invoicy/produccion generate -c factura.toml
 
 **The home decides the environment.** Homologación (ARCA's testing environment) and producción need different certificates and different portal steps; a testing certificate doesn't work in production and vice versa. Keep one home per environment (e.g. `~/invoicy/homologacion` and `~/invoicy/produccion`) and double-check which one you use: every `generate` against production issues a real, fiscally valid invoice.
 
+## Several issuers
+
+To issue invoices for more than one person or company, give each one its own home: one `emisor.toml` (CUIT, punto de venta, environment), certificate and login cache per CUIT. Run steps 1–5 once per home, each with that issuer's clave fiscal.
+
+```bash
+invoicy --home ~/invoicy/ana    afip configure --cuit 27… --razon-social "Ana …"    --punto-venta 2 --production
+invoicy --home ~/invoicy/carlos afip configure --cuit 20… --razon-social "Carlos …" --punto-venta 5 --production
+
+invoicy --home ~/invoicy/ana    generate -c factura.toml   # → output/ana/
+invoicy --home ~/invoicy/carlos generate -c factura.toml   # → output/carlos/
+```
+
+- **Output:** by default each home writes to `output/<home name>`, so each issuer's invoices stay apart. Give homes distinct names: `~/a/prod` and `~/b/prod` would both write to `output/prod`. Use `--output` to put them somewhere else.
+- **Absolute paths:** use an absolute `--home` (or one starting with `~`). `afip configure` saves the certificate and key paths as `<home>/certs/…`, so a relative home only works from the directory you ran `configure` in.
+- **`$AFIP_HOME`:** if it's exported, every command without `--home` goes to that issuer. With several production homes, prefer passing `--home` every time, or a shell alias per issuer (`alias invoicy-ana='invoicy --home ~/invoicy/ana'`).
+
 ## 1. Create the punto de venta in ARCA
 
 You need a punto de venta **enabled for Web Services**, which is **different** from the one usually used in «Comprobantes en Línea»:

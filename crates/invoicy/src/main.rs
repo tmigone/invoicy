@@ -42,8 +42,9 @@ enum Commands {
         template: Option<PathBuf>,
 
         /// Directory for the generated PDF and TOML
-        #[arg(short, long, default_value = "output")]
-        output: PathBuf,
+        /// [default: output/<name of the home directory>, e.g. output/invoicy]
+        #[arg(short, long)]
+        output: Option<PathBuf>,
 
         /// Override config values (e.g., --set comprobante.periodo_desde=01/10/2026)
         #[arg(short = 's', long = "set", value_name = "KEY=VALUE")]

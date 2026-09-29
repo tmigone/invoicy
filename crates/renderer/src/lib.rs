@@ -82,11 +82,7 @@ mod tests {
 
     #[test]
     fn renders_every_example() {
-        for name in [
-            "generic",
-            "afip/consumidor_final",
-            "afip/responsable_inscripto",
-        ] {
+        for name in ["generic", "consumidor_final", "responsable_inscripto"] {
             let pdf = render(&example(name), None).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(is_pdf(&pdf), "{name} did not produce a PDF");
         }
@@ -106,8 +102,7 @@ mod tests {
     #[test]
     fn json_carries_toml_field_names_and_totals() {
         let json: serde_json::Value =
-            serde_json::from_slice(&data::to_json(&example("afip/consumidor_final")).unwrap())
-                .unwrap();
+            serde_json::from_slice(&data::to_json(&example("consumidor_final")).unwrap()).unwrap();
         assert_eq!(json["emisor"]["razon_social"], "Juan Pérez");
         assert_eq!(json["items"][0]["bonificacion_porcentaje"], 0.0);
         assert_eq!(json["items"][1]["subtotal"], 50000.0);
@@ -123,7 +118,7 @@ mod tests {
             json["receptor"].clone()
         };
 
-        let config = example("afip/consumidor_final");
+        let config = example("consumidor_final");
         let r = receptor(&config);
         assert_eq!(r["condicion_iva"], "Consumidor Final");
         assert_eq!(r["doc_tipo"], "CUIT");
@@ -149,7 +144,7 @@ mod tests {
 
     #[test]
     fn renders_the_qr_once_authorized_and_a_blank_box_before() {
-        let config = example("afip/consumidor_final");
+        let config = example("consumidor_final");
         let InvoiceConfig::AfipC(inv) = &config else {
             unreachable!()
         };
