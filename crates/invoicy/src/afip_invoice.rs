@@ -8,12 +8,17 @@
 use std::path::Path;
 
 use afip::{DocTipo, FacturaC};
+use chrono::{Datelike, Days, FixedOffset, NaiveDate, Utc};
 use schema::AfipCInvoice;
 use schema::afip_c::{Cae, Receptor};
 
 use crate::emisor::EmisorProfile;
 
 type BoxError = Box<dyn std::error::Error>;
+
+/// Default payment term: `fecha_vencimiento` is this many days after
+/// `fecha_emision` when the draft doesn't set it.
+const DIAS_VENCIMIENTO: u64 = 15;
 
 /// Authorize `inv` against WSFE, filling in every automatic field.
 pub fn authorize(
@@ -48,11 +53,37 @@ pub fn authorize(
     Ok(())
 }
 
+/// Everything [`authorize`] does short of requesting the CAE: fill in and
+/// validate the invoice, then log in to AFIP (proving the certificate works
+/// and is authorized for WSFE) and read the last voucher number. Nothing is
+/// issued. Sets `comprobante.numero` to the number the invoice would get.
+pub fn check(profile: &EmisorProfile, home: &Path, inv: &mut AfipCInvoice) -> Result<(), BoxError> {
+    prepare(profile, inv)?;
+
+    let client = profile.client(home)?;
+    let last = client.last_voucher(inv.voucher_type())?;
+    inv.comprobante.numero = format!("{:08}", last + 1);
+    Ok(())
+}
+
 /// Fill in what's known before calling AFIP (emisor, punto de venta, computed
 /// fields), validate, and build the WSFE request.
 fn prepare(profile: &EmisorProfile, inv: &mut AfipCInvoice) -> Result<FacturaC, BoxError> {
     inv.emisor = profile.emisor();
     inv.comprobante.punto_de_venta = format!("{:05}", profile.punto_venta);
+
+    // Dates: validate what the draft wrote, fill in the defaults, and store
+    // the values used so the record and the PDF show exactly what AFIP gets.
+    let comprobante = &mut inv.comprobante;
+    let emision =
+        parse_fecha("fecha_emision", &comprobante.fecha_emision)?.unwrap_or_else(today_ar);
+    let vencimiento = parse_fecha("fecha_vencimiento", &comprobante.fecha_vencimiento)?
+        .unwrap_or(emision + Days::new(DIAS_VENCIMIENTO));
+    let desde = parse_periodo("periodo_desde", comprobante.periodo_desde.as_deref())?;
+    let hasta = parse_periodo("periodo_hasta", comprobante.periodo_hasta.as_deref())?;
+    comprobante.fecha_emision = ddmmyyyy(emision);
+    comprobante.fecha_vencimiento = ddmmyyyy(vencimiento);
+
     inv.compute();
 
     let total = inv.totales.total;
@@ -63,16 +94,17 @@ fn prepare(profile: &EmisorProfile, inv: &mut AfipCInvoice) -> Result<FacturaC, 
 
     let concepto = inv.comprobante.concepto;
     let (desde, hasta, vto) = if concepto.requires_service_dates() {
+        // AFIP needs the billing period for services; there's no sensible
+        // default, and the PDF must show the same period AFIP authorizes.
+        let (Some(desde), Some(hasta)) = (desde, hasta) else {
+            return Err("para servicios hacen falta comprobante.periodo_desde y \
+                        comprobante.periodo_hasta"
+                .into());
+        };
         (
-            inv.comprobante
-                .periodo_desde
-                .as_deref()
-                .and_then(ddmmyyyy_to_yyyymmdd),
-            inv.comprobante
-                .periodo_hasta
-                .as_deref()
-                .and_then(ddmmyyyy_to_yyyymmdd),
-            ddmmyyyy_to_yyyymmdd(&inv.comprobante.fecha_vencimiento),
+            Some(yyyymmdd(desde)),
+            Some(yyyymmdd(hasta)),
+            Some(yyyymmdd(vencimiento)),
         )
     } else {
         (None, None, None)
@@ -83,7 +115,7 @@ fn prepare(profile: &EmisorProfile, inv: &mut AfipCInvoice) -> Result<FacturaC, 
         doc_tipo: inv.receptor.doc_tipo,
         doc_nro: inv.receptor.doc_nro,
         importe_total: total,
-        fecha: None,
+        fecha: Some(yyyymmdd(emision)),
         fecha_servicio_desde: desde,
         fecha_servicio_hasta: hasta,
         fecha_vto_pago: vto,
@@ -109,15 +141,38 @@ fn check_documento(receptor: &Receptor) -> Result<(), BoxError> {
     }
 }
 
-fn ddmmyyyy_to_yyyymmdd(s: &str) -> Option<u32> {
-    let p: Vec<&str> = s.split('/').collect();
-    if p.len() != 3 {
-        return None;
+/// Today in Argentina (UTC−03:00, no DST).
+fn today_ar() -> NaiveDate {
+    let offset = FixedOffset::west_opt(3 * 3600).expect("valid offset");
+    Utc::now().with_timezone(&offset).date_naive()
+}
+
+/// `comprobante.<field>` as a `DD/MM/YYYY` date; `None` when empty.
+fn parse_fecha(field: &str, value: &str) -> Result<Option<NaiveDate>, BoxError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
     }
-    let d: u32 = p[0].trim().parse().ok()?;
-    let m: u32 = p[1].trim().parse().ok()?;
-    let y: u32 = p[2].trim().parse().ok()?;
-    Some(y * 10000 + m * 100 + d)
+    NaiveDate::parse_from_str(value, "%d/%m/%Y")
+        .map(Some)
+        .map_err(|_| {
+            format!("comprobante.{field} no es una fecha válida (DD/MM/YYYY): \"{value}\"").into()
+        })
+}
+
+fn parse_periodo(field: &str, value: Option<&str>) -> Result<Option<NaiveDate>, BoxError> {
+    Ok(match value {
+        Some(value) => parse_fecha(field, value)?,
+        None => None,
+    })
+}
+
+fn ddmmyyyy(date: NaiveDate) -> String {
+    date.format("%d/%m/%Y").to_string()
+}
+
+fn yyyymmdd(date: NaiveDate) -> u32 {
+    date.year() as u32 * 10000 + date.month() * 100 + date.day()
 }
 
 fn yyyymmdd_to_ddmmyyyy(n: u32) -> String {
@@ -198,5 +253,65 @@ mod tests {
         assert!(prepare(&profile(3), &mut draft("doc_tipo = \"cuit\"")).is_err());
         assert!(prepare(&profile(3), &mut draft("doc_nro = 123")).is_err());
         assert!(prepare(&profile(3), &mut draft("doc_tipo = \"dni\"\ndoc_nro = 123")).is_ok());
+    }
+
+    #[test]
+    fn dates_default_to_today_and_fifteen_days_later() {
+        let mut inv = draft("");
+        inv.comprobante.fecha_vencimiento.clear();
+        let factura = prepare(&profile(3), &mut inv).unwrap();
+
+        let today = today_ar();
+        let due = today + Days::new(15);
+        assert_eq!(inv.comprobante.fecha_emision, ddmmyyyy(today));
+        assert_eq!(inv.comprobante.fecha_vencimiento, ddmmyyyy(due));
+        assert_eq!(factura.fecha, Some(yyyymmdd(today)));
+        assert_eq!(factura.fecha_vto_pago, Some(yyyymmdd(due)));
+    }
+
+    #[test]
+    fn due_date_follows_a_written_issue_date() {
+        let mut inv = draft("");
+        inv.comprobante.fecha_emision = "25/12/2026".into();
+        inv.comprobante.fecha_vencimiento.clear();
+        let factura = prepare(&profile(3), &mut inv).unwrap();
+
+        assert_eq!(factura.fecha, Some(20261225));
+        assert_eq!(inv.comprobante.fecha_vencimiento, "09/01/2027");
+        assert_eq!(factura.fecha_vto_pago, Some(20270109));
+    }
+
+    #[test]
+    fn invalid_dates_are_rejected_instead_of_replaced() {
+        for (field, set) in [
+            ("fecha_emision", "31/02/2026"),
+            ("fecha_vencimiento", "2026-10-10"),
+            ("periodo_desde", "1/9"),
+        ] {
+            let mut inv = draft("");
+            match field {
+                "fecha_emision" => inv.comprobante.fecha_emision = set.into(),
+                "fecha_vencimiento" => inv.comprobante.fecha_vencimiento = set.into(),
+                _ => inv.comprobante.periodo_desde = Some(set.into()),
+            }
+            let err = prepare(&profile(3), &mut inv).unwrap_err().to_string();
+            assert!(err.contains(field), "{field}: {err}");
+        }
+    }
+
+    #[test]
+    fn services_need_a_billing_period() {
+        let mut inv = draft("");
+        inv.comprobante.periodo_hasta = None;
+        let err = prepare(&profile(3), &mut inv).unwrap_err().to_string();
+        assert!(err.contains("periodo_hasta"), "{err}");
+
+        // Products don't.
+        let mut inv = draft("");
+        inv.comprobante.concepto = afip::Concepto::Productos;
+        inv.comprobante.periodo_desde = None;
+        inv.comprobante.periodo_hasta = None;
+        let factura = prepare(&profile(3), &mut inv).unwrap();
+        assert_eq!(factura.fecha_servicio_desde, None);
     }
 }

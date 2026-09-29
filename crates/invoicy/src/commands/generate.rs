@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use afip::Environment;
 use schema::InvoiceConfig;
 use toml::Value;
 
@@ -17,12 +18,17 @@ type BoxError = Box<dyn std::error::Error>;
 /// The home and output directory come from `--home` / `--output` or from the
 /// draft's `home` / `output` keys (they must agree if both are given), then
 /// `$AFIP_HOME` / `~/invoicy` and [`default_output_dir`].
+///
+/// With `dry_run`, every check runs (for `afip_c`: the profile, the AFIP login
+/// and the next voucher number, all read-only) and the PDF is rendered in
+/// memory, but no CAE is requested and nothing is written.
 pub fn generate(
     cli_home: Option<PathBuf>,
     config_path: PathBuf,
     template: Option<PathBuf>,
     cli_output: Option<PathBuf>,
     override_args: Vec<String>,
+    dry_run: bool,
 ) -> Result<(), BoxError> {
     // Read and parse config as TOML Value first
     let config_content = std::fs::read_to_string(&config_path)?;
@@ -54,16 +60,53 @@ pub fn generate(
 
     // Everything that can fail locally happens before AFIP issues anything.
     let template_content = template.map(std::fs::read_to_string).transpose()?;
-    std::fs::create_dir_all(&output_dir)?;
+    if !dry_run {
+        std::fs::create_dir_all(&output_dir)?;
+    }
 
     // afip_c invoices are drafts: authorizing fills in the emisor, número,
     // fecha and CAE. Each run issues a new comprobante.
+    let mut summary = Vec::new();
     if let InvoiceConfig::AfipC(inv) = &mut config {
         let profile = EmisorProfile::load(home)?;
-        afip_invoice::authorize(&profile, home, inv)?;
+        if dry_run {
+            afip_invoice::check(&profile, home, inv)?;
+            let environment = match profile.environment {
+                Environment::Homologacion => "homologación (testing)",
+                Environment::Produccion => "PRODUCCIÓN (would be a real invoice)",
+            };
+            summary.push(format!(
+                "Issuer:      {} (CUIT {}), {environment}",
+                profile.razon_social, profile.cuit
+            ));
+            summary.push(format!(
+                "Number:      {}-{} (next free one; AFIP assigns it when issuing)",
+                inv.comprobante.punto_de_venta, inv.comprobante.numero
+            ));
+            summary.push(format!(
+                "Dates:       issued {}, payment due {}",
+                inv.comprobante.fecha_emision, inv.comprobante.fecha_vencimiento
+            ));
+            summary.push(format!("Total:       ${:.2}", inv.totales.total));
+        } else {
+            afip_invoice::authorize(&profile, home, inv)?;
+        }
     }
 
     let stem = unique_stem(&output_dir, &format!("invoice-{}", config.invoice_number()));
+
+    if dry_run {
+        renderer::render(&config, template_content.as_deref())?;
+        println!("✔ Dry run: the invoice is valid and renders. Nothing was issued or written.");
+        for line in &summary {
+            println!("  {line}");
+        }
+        println!(
+            "  Would write: {}",
+            output_dir.join(format!("{stem}.{{toml,pdf}}")).display()
+        );
+        return Ok(());
+    }
 
     // The TOML is the invoice's record: write it before rendering so a
     // failed render never loses an issued CAE.
@@ -252,5 +295,62 @@ mod tests {
         let dir = std::env::temp_dir();
         let dotted = dir.join("..").join(dir.file_name().unwrap());
         assert!(pick_path("home", "--home", Some(dir), Some(dotted)).is_ok());
+    }
+
+    fn example(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../examples/{name}.toml"))
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("invoicy-dry-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn dry_run_checks_and_renders_but_writes_nothing() {
+        let out = scratch("generic");
+        let generic = example("generic");
+        generate(None, generic.clone(), None, Some(out.clone()), vec![], true).unwrap();
+        assert!(!out.exists(), "dry run created {}", out.display());
+
+        // Still a real check: a broken draft fails.
+        let broken = vec!["items[0].rate=not-a-number".to_string()];
+        assert!(generate(None, generic, None, Some(out.clone()), broken, true).is_err());
+        assert!(!out.exists());
+    }
+
+    #[test]
+    fn afip_dry_run_needs_a_working_certificate() {
+        // A configured home without a certificate: the dry run gets through
+        // the local checks and stops at the AFIP login, before any network.
+        let home = scratch("afip-home");
+        super::super::afip::configure(
+            &home,
+            20111111112,
+            "Test".into(),
+            1,
+            "Responsable Monotributo".into(),
+            String::new(),
+            String::new(),
+            String::new(),
+            false,
+        )
+        .unwrap();
+        let out = scratch("afip-out");
+        let draft_path = home.join("draft.toml");
+        std::fs::write(&draft_path, toml::to_string(&draft("")).unwrap()).unwrap();
+        let err = generate(
+            Some(home.clone()),
+            draft_path,
+            None,
+            Some(out.clone()),
+            vec![],
+            true,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("certificate"), "{err}");
+        assert!(!out.exists());
+        std::fs::remove_dir_all(&home).unwrap();
     }
 }

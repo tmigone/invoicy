@@ -49,6 +49,13 @@ enum Commands {
         /// Override config values (e.g., --set comprobante.periodo_desde=01/10/2026)
         #[arg(short = 's', long = "set", value_name = "KEY=VALUE")]
         overrides: Vec<String>,
+
+        /// Check the invoice without issuing it: validates the draft, renders
+        /// the PDF in memory and, for afip_c, loads the profile, logs in to
+        /// AFIP and reads the next voucher number (read-only). No CAE is
+        /// requested and nothing is written.
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Show the schema for an invoice format.
@@ -131,7 +138,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             template,
             output,
             overrides,
-        } => commands::generate(cli_home, config, template, output, overrides),
+            dry_run,
+        } => commands::generate(cli_home, config, template, output, overrides, dry_run),
 
         Commands::Schema { format } => commands::schema(&format),
 

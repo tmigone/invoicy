@@ -114,4 +114,4 @@ invoicy --home ~/invoicy/homologacion afip list-vouchers --last 25
 invoicy --home ~/invoicy/homologacion afip list-vouchers --from 1 --to 50
 ```
 
-If `last-voucher` works, `generate` can authorize `afip_c` invoices.
+If `last-voucher` works, `generate` can authorize `afip_c` invoices. To check a specific draft end to end without issuing it, run `invoicy generate -c factura.toml --dry-run`.

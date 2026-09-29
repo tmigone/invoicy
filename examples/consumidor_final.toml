@@ -1,5 +1,7 @@
 # AFIP Factura C Example (Argentina - Monotributo)
 format = "afip_c"
+home = "~/invoicy/homes/ana"
+output = "~/invoicy/output/ana"
 
 [receptor]
 condicion_iva = "consumidor_final"

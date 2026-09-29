@@ -41,6 +41,9 @@ invoicy generate -c invoice.toml
 # Write into another directory
 invoicy generate -c invoice.toml -o invoices/2026-09
 
+# Check an invoice without issuing or writing anything
+invoicy generate -c invoice.toml --dry-run
+
 # Use a custom template
 invoicy generate -c invoice.toml -t my-template.typ
 
@@ -74,6 +77,8 @@ output = "facturas/ana"  # where the PDF and TOML go
 ```
 
 Relative paths are relative to the draft's own folder, and `~` is your home folder. These two keys aren't part of the invoice: they don't appear in `invoicy schema` or in the output TOML. If you also pass `--home` or `--output` and it points somewhere else, `generate` stops with an error instead of guessing which one you meant. Otherwise the draft's values win over `$AFIP_HOME` and the defaults.
+
+`--dry-run` runs every check `generate` would, without issuing anything: it validates the draft, renders the PDF in memory (catching template errors) and, for `afip_c`, loads the issuer profile, logs in to AFIP with your certificate and reads the next voucher number. Those AFIP calls are read-only; no CAE is requested and no files are written. It prints the issuer, environment, number, total and where the files would go. Some rules are only checked by AFIP when it authorizes an invoice (e.g. which document types a receptor's IVA condition allows); homologación is the place to test those.
 
 ### Generic Invoice
 
@@ -142,14 +147,16 @@ Filled in automatically (writing any of them is an error):
 | Field | From |
 |---|---|
 | `[emisor]`, `comprobante.punto_de_venta` | AFIP: your profile, `emisor.toml` (`invoicy afip configure`) |
-| `comprobante.numero`, `comprobante.fecha_emision`, `[cae]` | AFIP, when it authorizes the invoice |
+| `comprobante.numero`, `[cae]` | AFIP, when it authorizes the invoice |
 | `comprobante.tipo` / `codigo` (`C` / `011`), `items[].subtotal`, `[totales]`, `qr` | computed |
 
 The PDF footer carries the QR code ARCA requires on electronic invoices (RG 4892/2020): it encodes ARCA's verification URL for the voucher (`https://www.arca.gob.ar/fe/qr/?p=…`), which is also recorded as `qr` in the output TOML.
 
 The receptor's `condicion_iva`, `doc_tipo` and `doc_nro` are the codes sent to AFIP when authorizing, and the PDF prints their labels ("IVA Responsable Inscripto", "CUIT: 30123456789"), so the two always match. Omit all three for an anonymous consumidor final. `condicion_iva` takes `responsable_inscripto`, `exento`, `consumidor_final`, `monotributo`, `no_categorizado`, `proveedor_del_exterior`, `cliente_del_exterior`, `liberado`, `monotributista_social`, `no_alcanzado` or `monotributo_trabajador_independiente_promovido`; `doc_tipo` takes `cuit`, `cuil`, `dni` or `consumidor_final`.
 
-`comprobante.concepto` is required: `productos`, `servicios` or `productos_y_servicios`. `comprobante.fecha_vencimiento` (the payment due date) is required too and always printed. For `servicios` (and mixed), it is sent to AFIP together with `periodo_desde` and `periodo_hasta` as the billing period; for `productos` it is only printed.
+`comprobante.concepto` is required: `productos`, `servicios` or `productos_y_servicios`. For `servicios` (and mixed), `periodo_desde` and `periodo_hasta` are required too, and are sent to AFIP as the billing period along with `fecha_vencimiento` as the payment due date.
+
+Dates are `DD/MM/YYYY`; an invalid one is an error. `comprobante.fecha_emision` (the issue date sent to AFIP) defaults to today in Argentina; if you set it, AFIP only accepts dates close to the day it authorizes the invoice. `comprobante.fecha_vencimiento` (the payment due date) defaults to 15 days after `fecha_emision`. Either way, the output TOML and the PDF show the dates actually used.
 
 Each item's subtotal is `cantidad × precio_unitario`, rounded to cents, and the total sent to AFIP is their sum. Discounts (bonificaciones) are not supported; the PDF prints them as 0.
 

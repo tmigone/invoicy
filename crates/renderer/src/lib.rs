@@ -46,8 +46,14 @@ mod tests {
 
     fn example(name: &str) -> InvoiceConfig {
         let path = format!("{}/../../examples/{name}.toml", env!("CARGO_MANIFEST_DIR"));
-        let mut config: InvoiceConfig =
+        let mut value: toml::Value =
             toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        // Drafts may name their `home` / `output`; like `invoicy generate`,
+        // drop them before parsing the invoice.
+        let root = value.as_table_mut().unwrap();
+        root.remove("home");
+        root.remove("output");
+        let mut config: InvoiceConfig = value.try_into().unwrap();
         if let InvoiceConfig::AfipC(inv) = &mut config {
             fake_authorization(inv);
         }

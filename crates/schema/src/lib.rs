@@ -139,7 +139,15 @@ mod tests {
         assert_eq!(source("emisor.cuit"), Some("AFIP"));
         assert_eq!(source("comprobante.punto_de_venta"), Some("AFIP"));
         assert_eq!(source("comprobante.numero"), Some("AFIP"));
-        assert_eq!(source("comprobante.fecha_emision"), Some("AFIP"));
+        assert_eq!(source("comprobante.fecha_emision"), None);
+        assert_eq!(
+            field("comprobante.fecha_emision").default.as_deref(),
+            Some("today")
+        );
+        assert_eq!(
+            field("comprobante.fecha_vencimiento").default.as_deref(),
+            Some("fecha_emision + 15 days")
+        );
         assert_eq!(source("cae.numero"), Some("AFIP"));
         assert_eq!(source("comprobante.tipo"), Some("computed"));
         assert_eq!(source("items[].subtotal"), Some("computed"));

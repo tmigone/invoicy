@@ -86,11 +86,18 @@ pub struct Comprobante {
     #[serde(skip_deserializing)]
     #[schemars(extend("x-source" = "AFIP"))]
     pub numero: String,
-    #[serde(skip_deserializing)]
-    #[schemars(extend("x-source" = "AFIP"))]
+    /// Issue date, DD/MM/YYYY (AFIP's `CbteFch`). Empty or omitted means
+    /// today (Argentina time); AFIP only accepts dates close to the day it
+    /// authorizes the invoice.
+    #[serde(default)]
+    #[schemars(extend("default" = "today"))]
     pub fecha_emision: String,
     pub periodo_desde: Option<String>,
     pub periodo_hasta: Option<String>,
+    /// Payment due date, DD/MM/YYYY. Empty or omitted means 15 days after
+    /// `fecha_emision`.
+    #[serde(default)]
+    #[schemars(extend("default" = "fecha_emision + 15 days"))]
     pub fecha_vencimiento: String,
 }
 
@@ -205,7 +212,6 @@ condicion_venta = "Contado"
 {receptor}
 [comprobante]
 concepto = "productos"
-fecha_vencimiento = ""
 {comprobante}
 [[items]]
 codigo = "1"
@@ -272,13 +278,20 @@ precio_unitario = 1.0
     }
 
     #[test]
+    fn dates_are_optional_and_can_be_written() {
+        let inv = parse("", "").unwrap();
+        assert_eq!(inv.comprobante.fecha_emision, "");
+        let inv = parse("", "fecha_emision = \"25/09/2026\"").unwrap();
+        assert_eq!(inv.comprobante.fecha_emision, "25/09/2026");
+    }
+
+    #[test]
     fn automatic_fields_cannot_be_written() {
         for comprobante in [
             "tipo = \"C\"",
             "codigo = \"011\"",
             "punto_de_venta = \"00001\"",
             "numero = \"00000001\"",
-            "fecha_emision = \"01/01/2025\"",
             "[emisor]\ncuit = \"20123456789\"",
             "[cae]\nnumero = \"1\"",
             "[totales]\ntotal = 1.0",
