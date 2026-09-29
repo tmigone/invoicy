@@ -119,48 +119,54 @@ enum AfipCommand {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
-    let home = afip::resolve_home(cli.home);
+    let Cli {
+        home: cli_home,
+        command,
+    } = Cli::parse();
 
-    match cli.command {
+    match command {
+        // The draft can name its home too, so `generate` resolves it itself.
         Commands::Generate {
             config,
             template,
             output,
             overrides,
-        } => commands::generate(&home, config, template, output, overrides),
+        } => commands::generate(cli_home, config, template, output, overrides),
 
         Commands::Schema { format } => commands::schema(&format),
 
-        Commands::Afip { command } => match command {
-            AfipCommand::Configure {
-                cuit,
-                razon_social,
-                punto_venta,
-                condicion_iva,
-                domicilio,
-                ingresos_brutos,
-                inicio_actividades,
-                production,
-            } => afip::configure(
-                &home,
-                cuit,
-                razon_social,
-                punto_venta,
-                condicion_iva,
-                domicilio,
-                ingresos_brutos,
-                inicio_actividades,
-                production,
-            ),
-            AfipCommand::GenerateCertificate { alias, force } => {
-                afip::generate_certificate(&home, &alias, force)
+        Commands::Afip { command } => {
+            let home = afip::resolve_home(cli_home);
+            match command {
+                AfipCommand::Configure {
+                    cuit,
+                    razon_social,
+                    punto_venta,
+                    condicion_iva,
+                    domicilio,
+                    ingresos_brutos,
+                    inicio_actividades,
+                    production,
+                } => afip::configure(
+                    &home,
+                    cuit,
+                    razon_social,
+                    punto_venta,
+                    condicion_iva,
+                    domicilio,
+                    ingresos_brutos,
+                    inicio_actividades,
+                    production,
+                ),
+                AfipCommand::GenerateCertificate { alias, force } => {
+                    afip::generate_certificate(&home, &alias, force)
+                }
+                AfipCommand::Status => afip::status(&home),
+                AfipCommand::LastVoucher => afip::last_voucher(&home),
+                AfipCommand::ListVouchers { last, from, to } => {
+                    afip::list_vouchers(&home, last, from, to)
+                }
             }
-            AfipCommand::Status => afip::status(&home),
-            AfipCommand::LastVoucher => afip::last_voucher(&home),
-            AfipCommand::ListVouchers { last, from, to } => {
-                afip::list_vouchers(&home, last, from, to)
-            }
-        },
+        }
     }
 }

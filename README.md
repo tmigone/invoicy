@@ -65,6 +65,16 @@ Create a TOML file with your invoice data. The `format` field determines which t
 
 The output directory defaults to `output/<name of the home directory>` under the current directory, so each issuer's invoices land in their own folder: with the default home `~/invoicy` that's `output/invoicy`, with `--home ~/invoicy/ana` it's `output/ana`. `--output <dir>` overrides it.
 
+A draft can also say which home and output directory it uses, so you don't have to pass them every time:
+
+```toml
+format = "afip_c"
+home = "~/invoicy/ana"   # the issuer (see docs/afip-setup.md)
+output = "facturas/ana"  # where the PDF and TOML go
+```
+
+Relative paths are relative to the draft's own folder, and `~` is your home folder. These two keys aren't part of the invoice: they don't appear in `invoicy schema` or in the output TOML. If you also pass `--home` or `--output` and it points somewhere else, `generate` stops with an error instead of guessing which one you meant. Otherwise the draft's values win over `$AFIP_HOME` and the defaults.
+
 ### Generic Invoice
 
 ```toml

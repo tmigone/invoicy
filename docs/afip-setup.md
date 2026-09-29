@@ -10,7 +10,7 @@ One-time steps before invoicy can issue `afip_c` invoices (see the [README](../R
 
 ## The home directory
 
-All AFIP commands, and `generate` for `afip_c`, work on a home directory that holds your issuer profile (`emisor.toml`), your key and certificate (`certs/invoicy.key`, `certs/invoicy.crt`) and the cached login credentials (`cache/`). It is `--home <dir>` if given, otherwise `$AFIP_HOME`, otherwise `~/invoicy`:
+All AFIP commands, and `generate` for `afip_c`, work on a home directory that holds your issuer profile (`emisor.toml`), your key and certificate (`certs/invoicy.key`, `certs/invoicy.crt`) and the cached login credentials (`cache/`). It is `--home <dir>` if given, otherwise the draft's `home` key (for `generate`), otherwise `$AFIP_HOME`, otherwise `~/invoicy`:
 
 ```bash
 invoicy --home ~/invoicy/produccion generate -c factura.toml
@@ -30,9 +30,18 @@ invoicy --home ~/invoicy/ana    generate -c factura.toml   # → output/ana/
 invoicy --home ~/invoicy/carlos generate -c factura.toml   # → output/carlos/
 ```
 
+Safer: put the issuer in each draft, so the invoice can't go out under the wrong CUIT because of a forgotten or mistyped `--home`:
+
+```toml
+format = "afip_c"
+home = "~/invoicy/ana"
+```
+
+With that, `invoicy generate -c factura-ana.toml` needs no flag, and passing a different `--home` is an error.
+
 - **Output:** by default each home writes to `output/<home name>`, so each issuer's invoices stay apart. Give homes distinct names: `~/a/prod` and `~/b/prod` would both write to `output/prod`. Use `--output` to put them somewhere else.
 - **Absolute paths:** use an absolute `--home` (or one starting with `~`). `afip configure` saves the certificate and key paths as `<home>/certs/…`, so a relative home only works from the directory you ran `configure` in.
-- **`$AFIP_HOME`:** if it's exported, every command without `--home` goes to that issuer. With several production homes, prefer passing `--home` every time, or a shell alias per issuer (`alias invoicy-ana='invoicy --home ~/invoicy/ana'`).
+- **`$AFIP_HOME`:** if it's exported, every command without `--home` (and every draft without `home`) goes to that issuer. With several production homes, prefer the `home` key in each draft, or pass `--home` every time.
 
 ## 1. Create the punto de venta in ARCA
 

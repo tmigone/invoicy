@@ -3,25 +3,41 @@ use std::path::{Path, PathBuf};
 use schema::InvoiceConfig;
 use toml::Value;
 
+use super::afip::resolve_home;
 use crate::afip_invoice;
 use crate::emisor::EmisorProfile;
 use crate::overrides;
 
-/// Generate an invoice into `output_dir` (by default [`default_output_dir`]):
-/// `<name>.toml` with every field of the invoice (including the ones filled in
-/// automatically) and `<name>.pdf`.
+type BoxError = Box<dyn std::error::Error>;
+
+/// Generate an invoice into the output directory: `<name>.toml` with every
+/// field of the invoice (including the ones filled in automatically) and
+/// `<name>.pdf`.
+///
+/// The home and output directory come from `--home` / `--output` or from the
+/// draft's `home` / `output` keys (they must agree if both are given), then
+/// `$AFIP_HOME` / `~/invoicy` and [`default_output_dir`].
 pub fn generate(
-    home: &Path,
+    cli_home: Option<PathBuf>,
     config_path: PathBuf,
     template: Option<PathBuf>,
-    output_dir: Option<PathBuf>,
+    cli_output: Option<PathBuf>,
     override_args: Vec<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let output_dir = output_dir.unwrap_or_else(|| default_output_dir(home));
-
+) -> Result<(), BoxError> {
     // Read and parse config as TOML Value first
     let config_content = std::fs::read_to_string(&config_path)?;
     let mut config_value: Value = toml::from_str(&config_content)?;
+
+    // `home` and `output` say who issues the invoice and where it goes, not
+    // what it contains: take them out before the invoice is parsed, so they
+    // never reach the model or the output record.
+    let base = config_path.parent().unwrap_or(Path::new(""));
+    let from_file = take_run_settings(&mut config_value, base)?;
+    let home = pick_path("home", "--home", cli_home, from_file.home)?
+        .unwrap_or_else(|| resolve_home(None));
+    let output_dir = pick_path("output", "--output", cli_output, from_file.output)?
+        .unwrap_or_else(|| default_output_dir(&home));
+    let home = home.as_path();
 
     // Extract format for schema-aware overrides
     let format = config_value
@@ -63,6 +79,77 @@ pub fn generate(
     Ok(())
 }
 
+/// The draft's `home` and `output` keys, resolved to paths.
+#[derive(Debug, Default)]
+struct RunSettings {
+    home: Option<PathBuf>,
+    output: Option<PathBuf>,
+}
+
+/// Remove `home` and `output` from the draft's top level. Relative paths are
+/// relative to the draft's directory (`base`), so a draft works from anywhere.
+fn take_run_settings(value: &mut Value, base: &Path) -> Result<RunSettings, BoxError> {
+    let Some(root) = value.as_table_mut() else {
+        return Ok(RunSettings::default());
+    };
+    let mut take = |key: &str| -> Result<Option<PathBuf>, BoxError> {
+        match root.remove(key) {
+            None => Ok(None),
+            Some(Value::String(raw)) => Ok(Some(resolve_path(&raw, base))),
+            Some(_) => Err(format!("`{key}` debe ser una ruta (texto)").into()),
+        }
+    };
+    Ok(RunSettings {
+        home: take("home")?,
+        output: take("output")?,
+    })
+}
+
+/// Expand a leading `~` and make relative paths relative to `base`.
+fn resolve_path(raw: &str, base: &Path) -> PathBuf {
+    let user_home = || PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()));
+    let path = match raw.strip_prefix("~/") {
+        Some(rest) => user_home().join(rest),
+        None if raw == "~" => user_home(),
+        None => PathBuf::from(raw),
+    };
+    if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    }
+}
+
+/// A path the command line (`flag`) and the draft (`key`) can both set. When
+/// both do, they must name the same place: disagreeing about who issues the
+/// invoice, or where it goes, is almost certainly a mistake.
+fn pick_path(
+    key: &str,
+    flag: &str,
+    cli: Option<PathBuf>,
+    file: Option<PathBuf>,
+) -> Result<Option<PathBuf>, BoxError> {
+    match (cli, file) {
+        (Some(cli), Some(file)) if !same_path(&cli, &file) => Err(format!(
+            "{flag} {} no coincide con `{key}` del TOML ({}); dejá solo uno",
+            cli.display(),
+            file.display()
+        )
+        .into()),
+        (Some(cli), _) => Ok(Some(cli)),
+        (None, file) => Ok(file),
+    }
+}
+
+/// Whether two paths name the same place (resolving `..` and symlinks when
+/// they exist).
+fn same_path(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a.components().eq(b.components()),
+    }
+}
+
 /// `output/<home name>`, so each issuer's invoices (one home each) land in
 /// their own folder: `--home ~/invoicy/ana` writes to `output/ana`.
 fn default_output_dir(home: &Path) -> PathBuf {
@@ -99,5 +186,71 @@ mod tests {
         assert_eq!(out("home/homologacion"), Path::new("output/homologacion"));
         assert_eq!(out("home/produccion/"), Path::new("output/produccion"));
         assert_eq!(out("/"), Path::new("output"));
+    }
+
+    fn draft(extra: &str) -> Value {
+        toml::from_str(&format!(
+            r#"
+            format = "afip_c"
+            {extra}
+            [receptor]
+            condicion_venta = "Contado"
+            [comprobante]
+            concepto = "productos"
+            fecha_vencimiento = "15/10/2026"
+            [[items]]
+            codigo = "1"
+            descripcion = "x"
+            cantidad = 1.0
+            unidad = "u"
+            precio_unitario = 1.0
+            "#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn run_settings_resolve_against_the_draft_directory() {
+        let mut value = draft("home = \"homes/ana\"\noutput = \"/tmp/facturas\"");
+        let settings = take_run_settings(&mut value, Path::new("/work/drafts")).unwrap();
+        assert_eq!(settings.home.unwrap(), Path::new("/work/drafts/homes/ana"));
+        assert_eq!(settings.output.unwrap(), Path::new("/tmp/facturas"));
+
+        // They aren't invoice data: the draft still parses as afip_c.
+        assert!(value.get("home").is_none() && value.get("output").is_none());
+        assert!(value.try_into::<InvoiceConfig>().is_ok());
+    }
+
+    #[test]
+    fn run_settings_expand_tilde_and_reject_non_paths() {
+        let user_home = PathBuf::from(std::env::var("HOME").unwrap());
+        let mut value = draft("home = \"~/invoicy/ana\"");
+        let settings = take_run_settings(&mut value, Path::new("/work")).unwrap();
+        assert_eq!(settings.home.unwrap(), user_home.join("invoicy/ana"));
+        assert!(settings.output.is_none());
+
+        let mut value = draft("home = 3");
+        assert!(take_run_settings(&mut value, Path::new("/work")).is_err());
+    }
+
+    #[test]
+    fn flag_and_draft_must_agree() {
+        let path = |p: &str| Some(PathBuf::from(p));
+        assert_eq!(
+            pick_path("home", "--home", path("/a"), None).unwrap(),
+            path("/a")
+        );
+        assert_eq!(
+            pick_path("home", "--home", None, path("/b")).unwrap(),
+            path("/b")
+        );
+        assert_eq!(pick_path("home", "--home", None, None).unwrap(), None);
+        assert!(pick_path("home", "--home", path("/a"), path("/b")).is_err());
+        assert!(pick_path("output", "--output", path("/a"), path("/b")).is_err());
+
+        // Same place, spelled differently.
+        let dir = std::env::temp_dir();
+        let dotted = dir.join("..").join(dir.file_name().unwrap());
+        assert!(pick_path("home", "--home", Some(dir), Some(dotted)).is_ok());
     }
 }
