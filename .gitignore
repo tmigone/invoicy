@@ -4,3 +4,8 @@
 
 # Real data (not examples)
 examples/real*.toml
+
+home/
+
+# Default `invoicy generate` output directory
+/output

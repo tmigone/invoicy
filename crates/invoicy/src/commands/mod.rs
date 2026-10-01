@@ -1,3 +1,4 @@
+pub mod afip;
 mod generate;
 mod schema;
 

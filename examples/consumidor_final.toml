@@ -1,0 +1,28 @@
+# AFIP Factura C Example (Argentina - Monotributo)
+format = "afip_c"
+home = "~/invoicy/homes/ana"
+output = "~/invoicy/output/ana"
+
+[receptor]
+condicion_iva = "consumidor_final"
+condicion_venta = "Cuenta Corriente"
+
+[comprobante]
+concepto = "servicios"
+periodo_desde = "01/09/2026"
+periodo_hasta = "30/09/2026"
+fecha_vencimiento = "15/10/2026"
+
+[[items]]
+codigo = "1"
+descripcion = "Servicio de consultoría"
+cantidad = 1.0
+unidad = "unidades"
+precio_unitario = 50000.00
+
+[[items]]
+codigo = "2"
+descripcion = "Desarrollo de software"
+cantidad = 10.0
+unidad = "horas"
+precio_unitario = 5000.00

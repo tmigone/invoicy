@@ -1,7 +1,5 @@
 use toml::Value;
 
-use crate::schema;
-
 /// Apply an override to a config value
 /// The format parameter is used to look up expected types from the schema
 /// when the field doesn't exist in the config
@@ -19,7 +17,7 @@ pub fn apply(config: &mut Value, override_str: &str, format: Option<&str>) -> Re
     let hint = match existing_type {
         ValueType::Unknown => {
             if let Some(fmt) = format {
-                schema_type_to_value_type(schema::get_field_type(fmt, key))
+                schema_type_to_value_type(schema::introspect::field_type(fmt, key))
             } else {
                 ValueType::Unknown
             }
@@ -34,7 +32,8 @@ pub fn apply(config: &mut Value, override_str: &str, format: Option<&str>) -> Re
 fn schema_type_to_value_type(schema_type: Option<String>) -> ValueType {
     match schema_type.as_deref() {
         Some("string") => ValueType::String,
-        Some("number") => ValueType::Float, // Use float for numbers as it's more general
+        Some("integer") => ValueType::Integer,
+        Some("number") => ValueType::Float,
         Some("boolean") => ValueType::Boolean,
         _ => ValueType::Unknown,
     }
@@ -390,5 +389,23 @@ mod tests {
         // Should be a string, not an integer
         assert!(number.is_str(), "invoice.number should be a string");
         assert_eq!(number.as_str().unwrap(), "123");
+    }
+
+    #[test]
+    fn apply_missing_integer_field_with_schema_hint() {
+        // receptor.doc_nro is a u64: it must be set as an integer, not 5.0
+        let mut config: Value = toml::from_str(
+            r#"
+            format = "afip_c"
+            [receptor]
+            condicion_venta = "Contado"
+            "#,
+        )
+        .unwrap();
+
+        apply(&mut config, "receptor.doc_nro=30712345678", Some("afip_c")).unwrap();
+
+        let doc_nro = config.get("receptor").unwrap().get("doc_nro").unwrap();
+        assert_eq!(doc_nro.as_integer(), Some(30712345678));
     }
 }

@@ -26,6 +26,11 @@ jobs:
       - name: Clippy
         run: cargo clippy -- -D warnings
 
+      # The workspace build always enables afip's `client` feature (invoicy
+      # needs it), so check the types-only build `schema` relies on separately.
+      - name: Clippy (afip without client)
+        run: cargo clippy -p afip --no-default-features --features schemars -- -D warnings
+
       - name: Build
         run: cargo build --release
 

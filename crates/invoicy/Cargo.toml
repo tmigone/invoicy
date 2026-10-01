@@ -1,0 +1,22 @@
+[package]
+name = "invoicy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# ARCA/AFIP web services SDK (authorization → CAE)
+afip = { path = "../afip" }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Config parsing
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# Invoice dates (defaults, validation)
+chrono = "0.4"
+
+# Invoice model, and Typst → PDF
+schema = { path = "../schema" }
+renderer = { path = "../renderer" }

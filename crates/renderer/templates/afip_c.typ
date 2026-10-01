@@ -1,5 +1,6 @@
 // AFIP Factura C Template
-// Data is injected via #let invoice-data = (...) 
+// Data is injected via #let invoice-data = json("data.json") before this file;
+// field names match the TOML (see `invoicy schema <format>`).
 
 #set page(
   paper: "a4",
@@ -142,7 +143,7 @@
       columns: (40%, 60%),
       row-gutter: 10pt,
       // Row 1
-      [*CUIT:* #if data.receptor.documento != none { data.receptor.documento } else { "-" }],
+      [*#data.receptor.doc_tipo:* #if data.receptor.doc_nro != none { data.receptor.doc_nro } else { "-" }],
       [*Apellido y Nombre / Razón Social:* #if data.receptor.nombre != none { data.receptor.nombre } else { "" }],
       // Row 2
       [*Condición frente al IVA:* #data.receptor.condicion_iva],
@@ -180,8 +181,8 @@
           [#format-number(item.cantidad)],
           [#item.unidad],
           [#format-number(item.precio_unitario)],
-          [#format-number(item.bonif_pct)],
-          [#format-number(item.bonif_imp)],
+          [#format-number(item.bonificacion_porcentaje)],
+          [#format-number(item.bonificacion_importe)],
           [#format-number(item.subtotal)],
         )
       },
@@ -221,19 +222,21 @@
     #grid(
       columns: (20%, 45%, 35%),
       
-      // Left: QR placeholder
-      box(width: 70pt, height: 70pt, stroke: 0.5pt)[
-        #align(center + horizon)[
-          #text(size: 6pt, fill: luma(150))[QR]
-        ]
-      ],
+      // Left: QR with ARCA's verification URL (RG 4892/2020)
+      if data.qr != "" {
+        image("qr.svg", width: 85pt)
+      } else {
+        box(width: 85pt, height: 85pt)
+      },
       
       // Center: ARCA info
-      box(inset: (left: -20pt, top: -5pt))[
+      box(inset: (top: -5pt))[
         #image("arca.jpeg", width: 55pt)
         #text(size: 9pt, style: "italic", weight: "bold")[Comprobante Autorizado]
         #v(0pt)
         #text(size: 7pt, style: "italic")[Esta Agencia no se responsabiliza por los datos ingresados en el detalle de la operación]
+        #v(0pt)
+        #text(size: 7pt, fill: luma(110))[• Generado por invoicy •]
       ],
       
       // Right: CAE info
